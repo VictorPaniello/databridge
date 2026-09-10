@@ -147,6 +147,11 @@ export interface ProfileUpdate {
   firstName: string;
   lastName: string;
   phone?: string;
+  // fastapi-users' BaseUserUpdate (which auth.py's UserUpdate extends)
+  // already carries an optional `password` field, validated through the
+  // same UserManager.validate_password override the registration policy
+  // uses - no backend change needed to support changing it here.
+  password?: string;
 }
 
 // PATCH /users/me is fastapi-users' generic update route - accepts a
@@ -161,6 +166,7 @@ export async function updateProfile(input: ProfileUpdate): Promise<CurrentUser> 
       first_name: input.firstName,
       last_name: input.lastName,
       phone: input.phone || null,
+      ...(input.password ? { password: input.password } : {}),
     }),
   });
 }
