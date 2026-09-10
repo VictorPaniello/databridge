@@ -242,27 +242,39 @@ project's own code or in actually deploying it:
 - No minimum password strength - `UserManager` doesn't override
   fastapi-users' `validate_password`, so a one-character password is
   currently accepted at registration.
-- No rate limiting on `/auth/jwt/login` or `/auth/register` - brute-force
-  and credential-stuffing are currently unthrottled.
-- No file size limit on `/records/upload` - an oversized file is read
-  fully into memory before tidycsv/pandas ever sees it.
 
 ## Security
 
-Found via a deliberate review, not a user report: **`JWT_SECRET` was never
-actually set in Railway** - every login token was signed with the
-obviously-fake default from `config.py`
-(`insecure-local-dev-secret-do-not-use-in-production`), sitting right there
-in the source. Confirmed exploitable, not just theoretical: forged a JWT
-for a real user with that known default and it authenticated successfully
-against the live `/users/me`. Fixed by generating a real random secret and
-setting it in Railway - re-verified afterwards that the forged token now
-gets 401 and a fresh real login still works.
+Found via a deliberate review, not a user report:
 
-The three gaps listed above (weak passwords accepted, no rate limiting, no
-upload size cap) were found in the same review and are real, but lower
-severity for a project at this stage - tracked rather than fixed
-immediately.
+- **`JWT_SECRET` was never actually set in Railway** - every login token
+  was signed with the obviously-fake default from `config.py`
+  (`insecure-local-dev-secret-do-not-use-in-production`), sitting right
+  there in the source. Confirmed exploitable, not just theoretical: forged
+  a JWT for a real user with that known default and it authenticated
+  successfully against the live `/users/me`. Fixed by generating a real
+  random secret and setting it in Railway - re-verified afterwards that
+  the forged token now gets 401 and a fresh real login still works.
+- **No cap on `/records/upload`** - an oversized file was read entirely
+  into memory before tidycsv/pandas ever saw it. Fixed: reads in bounded
+  1 MB chunks and rejects (413) as soon as `max_upload_size_mb` (default
+  10) is crossed, rather than trusting the client-controlled
+  `Content-Length` header.
+- **No rate limiting** on `/auth/jwt/login` or `/auth/register` -
+  unthrottled brute-force and credential-stuffing. Fixed with
+  [slowapi](https://github.com/laurentS/slowapi): 5/minute on those two
+  endpoints specifically, 60/minute as a general default across the rest
+  of the API. Keyed on the caller's real IP via `X-Forwarded-For` (see
+  `--proxy-headers` above) - verified with two different forwarded IPs
+  against the real Docker image that one IP hitting the limit doesn't
+  throttle another, which it would if the key still resolved to
+  Railway's own proxy IP for everyone.
+- Also checked and ruled out as **not** a hole: `PATCH /users/me` cannot
+  be used to self-promote to `is_superuser` - fastapi-users' safe-update
+  default already strips that field, confirmed by actually trying it.
+
+Still open (real, lower severity, not yet fixed): no minimum password
+strength (see above).
 
 ## License
 
