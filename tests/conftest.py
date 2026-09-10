@@ -14,12 +14,14 @@ os.environ.setdefault(
 )
 os.environ.setdefault("WEBHOOK_URL", "")  # no webhook during tests - keep them hermetic
 
+from alembic import command
+from alembic.config import Config
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 import databridge.auth_models  # noqa: F401 - registers users/oauth_account on Base.metadata
-from databridge.db import Base, SessionLocal, engine, get_db
+from databridge.db import SessionLocal, engine, get_db
 from databridge.main import app, limiter
 
 # The real strict rate limit on /auth/register and /auth/jwt/login (see
@@ -31,9 +33,30 @@ from databridge.main import app, limiter
 limiter.enabled = False
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _migrate_schema():
+    """Runs the real Alembic migration chain once per test session - the
+    same mechanism production uses (the Dockerfile's `alembic upgrade
+    head`) - instead of the Base.metadata.create_all() this used to call
+    per-test. create_all() only ever creates *missing* tables; it silently
+    leaves an existing table's columns stale on a schema change, which is
+    exactly what caused two real bugs earlier in this project (see
+    CHANGELOG) - a create_all()-based suite couldn't have caught either
+    one, only actually running the migrations would have. CI's Postgres
+    service container starts empty every run, so this always exercises the
+    full chain there, not just "head applies cleanly on top of whatever
+    was already there."
+
+    Needs an already-migrated (or genuinely fresh) database - a local test
+    DB still holding tables from before this change (create_all(), no
+    alembic_version tracking) will hit a DuplicateTable error here; drop
+    and recreate it once, the same fix used when this bit adopting Alembic
+    for the app itself."""
+    command.upgrade(Config("alembic.ini"), "head")
+
+
 @pytest.fixture(autouse=True)
 def _clean_tables():
-    Base.metadata.create_all(bind=engine)
     yield
     with engine.begin() as conn:
         conn.exec_driver_sql("TRUNCATE webhook_deliveries, client_records, oauth_account, users")
