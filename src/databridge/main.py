@@ -37,6 +37,7 @@ from databridge.db import get_db
 from databridge.ingest import ingest_file, load_schema
 from databridge.models import ClientRecord, WebhookDelivery
 from databridge.schemas import ClientRecordOut, IngestResult, RecordsPage, WebhookDeliveryOut
+from databridge.webhooks import notify_new_record
 
 # Nothing else in this process configures logging - Python's root logger
 # defaults to WARNING with zero handlers attached, so a plain
@@ -279,6 +280,39 @@ def get_record_webhooks(
         .order_by(WebhookDelivery.attempted_at, WebhookDelivery.id)
     )
     return db.execute(query).scalars().all()
+
+
+@app.post("/records/{record_id}/webhooks/replay", response_model=WebhookDeliveryOut)
+def replay_webhook(
+    record_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_active_user),
+) -> WebhookDelivery:
+    """Manually re-sends the notification for one record, on demand - a
+    real, separate action from the automatic retries in webhooks.py, not
+    another one of them. This is what a human actually does mid-incident:
+    a client says "our endpoint was down, we just fixed it, please resend
+    the last few" - waiting for an automatic retry schedule that already
+    exhausted itself doesn't help at that point.
+
+    Replays the record's *current* payload, not a stored historical one -
+    webhooks.py never persisted the literal bytes of a past attempt, only
+    its outcome (status_code/success/error), so there is no historical
+    payload to resend verbatim. In practice this is the same payload
+    every time regardless: nothing in this API ever mutates a
+    ClientRecord's fields after ingest, only deletes it outright, so
+    "current" and "at first delivery" are the same data.
+
+    Goes through the exact same signing/retry path as the original
+    delivery (same settings.webhook_max_attempts, same backoff) - a
+    replay that hits another transient failure retries the same way an
+    original delivery would, rather than failing after one try.
+    """
+    record = _get_owned_record(db, record_id, user)
+    delivery = notify_new_record(db, record)
+    if delivery is None:
+        raise HTTPException(status_code=400, detail="No webhook URL is configured")
+    return delivery
 
 
 @app.delete("/records/{record_id}", status_code=204)

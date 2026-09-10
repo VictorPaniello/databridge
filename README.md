@@ -43,6 +43,7 @@ company/client parameter, but because each `ClientRecord` has an
 | `GET` | `/records` | List **your own** records, paginated (`?limit=&offset=`, `limit` capped server-side at 500) and optionally `?has_issues=true/false`; returns `{items, total, limit, offset}` |
 | `GET` | `/records/{id}` | Fetch one of **your own** records - 404 (not 403) if it belongs to someone else, or doesn't exist |
 | `GET` | `/records/{id}/webhooks` | Audit log of webhook delivery attempts for one of your own records |
+| `POST` | `/records/{id}/webhooks/replay` | Manually re-send the notification for one of your own records, on demand - 400 if no `WEBHOOK_URL` is configured |
 | `DELETE` | `/records/{id}` | Permanently erase one of your own records (and its webhook delivery history) - the GDPR right-to-erasure endpoint |
 
 Re-uploading a file already ingested (matched by email, scoped to the
@@ -122,6 +123,17 @@ a transient 5xx) meant the notification was simply lost. See [What it
 doesn't do (yet)](#what-it-doesnt-do-yet) for the real tradeoff this
 still carries: retries run synchronously inside the same upload request,
 not as a background job.
+
+**Manual replay**: `POST /records/{id}/webhooks/replay` re-sends the
+notification for one record on demand - a real, separate action from the
+automatic retries above, not another one of them. This is what actually
+gets used mid-incident: a client fixes their endpoint and asks for the
+last few notifications to be resent, rather than waiting on a retry
+schedule that already exhausted itself. Goes through the exact same
+signing/retry path as a normal delivery. It replays the record's
+*current* payload, not a stored historical one - nothing in this API
+mutates a `ClientRecord` after ingest (only deletes it outright), so in
+practice "current" and "at first delivery" are always the same data.
 
 ## Local development
 

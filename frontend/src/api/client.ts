@@ -257,6 +257,14 @@ export async function getRecordWebhooks(id: string): Promise<WebhookDelivery[]> 
   return request<WebhookDelivery[]>(`/records/${id}/webhooks`);
 }
 
+// Manually re-sends the notification for one record, on demand - a real,
+// separate action from the automatic retries the backend already does
+// (see webhooks.py), not another one of them. Throws ApiError(400) if no
+// WEBHOOK_URL is configured server-side - there's nothing to replay to.
+export async function replayWebhook(id: string): Promise<WebhookDelivery> {
+  return request<WebhookDelivery>(`/records/${id}/webhooks/replay`, { method: "POST" });
+}
+
 export async function deleteRecord(id: string): Promise<void> {
   await request<void>(`/records/${id}`, { method: "DELETE" });
 }

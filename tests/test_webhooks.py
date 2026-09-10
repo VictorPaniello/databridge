@@ -198,3 +198,57 @@ def test_gives_up_after_max_attempts_and_logs_every_one(
     deliveries = client.get(f"/records/{record_id}/webhooks").json()
     assert [d["attempt_number"] for d in deliveries] == [1, 2, 3]
     assert all(d["success"] is False for d in deliveries)
+
+
+def test_replay_sends_a_fresh_delivery_on_demand(client: TestClient, webhook_receiver):
+    record_id = _upload(client).json()["records"][0]["id"]
+    assert len(webhook_receiver.received) == 5  # one per row in messy_clients.csv
+
+    response = client.post(f"/records/{record_id}/webhooks/replay")
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+
+    # The original delivery plus exactly one new one for this record -
+    # not a second full ingest, not another retry sequence.
+    assert len(webhook_receiver.received) == 6
+    deliveries = client.get(f"/records/{record_id}/webhooks").json()
+    assert [d["attempt_number"] for d in deliveries] == [1, 1]  # each its own attempt 1
+
+
+def test_replay_retries_on_a_transient_failure_the_same_as_a_real_delivery(
+    client: TestClient, flaky_webhook_receiver
+):
+    record_id = _upload_single_row(client).json()["records"][0]["id"]
+    assert len(flaky_webhook_receiver.received) == 1  # succeeded first try (fail_first_n=0)
+
+    # fail_first_n counts every request this handler has ever seen, not a
+    # fresh "next N requests" window - it already saw 1 (the successful
+    # ingest-time delivery above), so 2 means "the replay's own first
+    # attempt (the 2nd request overall) fails, its retry (the 3rd)
+    # succeeds".
+    flaky_webhook_receiver.fail_first_n = 2
+    response = client.post(f"/records/{record_id}/webhooks/replay")
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["attempt_number"] == 2  # failed once, succeeded on the retry
+    assert len(flaky_webhook_receiver.received) == 3  # 1 original + 2 for the replay
+
+
+def test_replay_without_a_configured_webhook_url_is_rejected(client: TestClient):
+    record_id = _upload(client).json()["records"][0]["id"]  # no webhook_receiver fixture here
+    response = client.post(f"/records/{record_id}/webhooks/replay")
+    assert response.status_code == 400
+
+
+def test_replay_respects_ownership(
+    client: TestClient, other_client: TestClient, webhook_receiver
+):
+    record_id = _upload(client).json()["records"][0]["id"]
+    response = other_client.post(f"/records/{record_id}/webhooks/replay")
+    assert response.status_code == 404  # existence of the record isn't revealed either
+
+
+def test_replay_unknown_record_returns_404(client: TestClient, webhook_receiver):
+    response = client.post("/records/00000000-0000-0000-0000-000000000000/webhooks/replay")
+    assert response.status_code == 404

@@ -7,6 +7,25 @@ nothing has been tagged as a release yet, so everything below is under
 ## [Unreleased]
 
 ### Added
+- **Manual webhook replay.** `POST /records/{id}/webhooks/replay`
+  re-sends a record's notification on demand - a real, separate action
+  from the automatic retries above, not another one of them. This is
+  what actually gets used mid-incident: a client fixes their receiver
+  and asks for the last few notifications to be resent, rather than
+  waiting on a retry schedule that already exhausted itself. Goes
+  through the exact same `notify_new_record()` signing/retry path a
+  normal delivery does - a replay that hits a transient failure retries
+  the same way an original delivery would. Replays the record's
+  *current* payload; there's no stored historical payload to resend
+  verbatim (`WebhookDelivery` only ever persisted each attempt's
+  outcome, not its request body) - in practice this is moot, since
+  nothing in this API mutates a `ClientRecord` after ingest, only
+  deletes it outright, so "current" and "at first delivery" are always
+  the same data. 400s if no `WEBHOOK_URL` is configured; 404s (not 403)
+  for another engineer's record, same as every other `/records/{id}*`
+  route. Frontend: a "Resend webhook" button on the record detail page,
+  next to the delivery history it just refreshes after a successful
+  replay.
 - **Frontend test coverage and CI.** The frontend previously had zero
   automated tests and wasn't checked by CI at all - `ci.yml`'s single
   job only ran the backend's `ruff`/`pytest`. Now a `frontend` job

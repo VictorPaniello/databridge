@@ -13,6 +13,8 @@ export function RecordDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [replaying, setReplaying] = useState(false);
+  const [replayError, setReplayError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -41,6 +43,20 @@ export function RecordDetailPage() {
       navigate("/");
     } catch {
       alert("Couldn't delete this record.");
+    }
+  }
+
+  async function handleReplay() {
+    if (!id) return;
+    setReplaying(true);
+    setReplayError(null);
+    try {
+      await api.replayWebhook(id);
+      setWebhooks(await api.getRecordWebhooks(id)); // refresh to show the new attempt(s)
+    } catch (err) {
+      setReplayError(err instanceof ApiError ? err.message : "Couldn't resend the webhook.");
+    } finally {
+      setReplaying(false);
     }
   }
 
@@ -89,7 +105,20 @@ export function RecordDetailPage() {
       )}
 
       <div className="mt-8">
-        <h2 className="text-sm font-semibold mb-2">Webhook deliveries</h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold">Webhook deliveries</h2>
+          <button
+            type="button"
+            onClick={handleReplay}
+            disabled={replaying}
+            className="rounded-md border border-border px-3 py-1 text-xs hover:bg-secondary transition disabled:opacity-50"
+          >
+            {replaying ? "Resending…" : "Resend webhook"}
+          </button>
+        </div>
+        {replayError && (
+          <p className="mb-2 text-sm text-red-500">{replayError}</p>
+        )}
         {webhooks.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             No webhook was configured, or none has been attempted for this record.
