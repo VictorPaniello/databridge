@@ -99,6 +99,20 @@ def test_upload_without_a_token_is_rejected(client: TestClient):
     assert response.status_code == 401
 
 
+def test_upload_exceeding_size_limit_is_rejected(client: TestClient, monkeypatch):
+    # A tiny limit for this test only, so it doesn't need to build a real
+    # multi-MB file to prove the chunked reader actually cuts off uploads -
+    # it exercises the same code path a real oversized file would hit.
+    import databridge.main as main_module
+
+    monkeypatch.setattr(main_module, "_MAX_UPLOAD_BYTES", 100)
+    oversized = b"a" * 200
+    response = client.post(
+        "/records/upload", files={"file": ("big.csv", oversized, "text/csv")}
+    )
+    assert response.status_code == 413
+
+
 def test_engineer_cannot_see_another_engineers_records(
     client: TestClient, other_client: TestClient
 ):

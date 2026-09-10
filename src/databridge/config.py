@@ -60,5 +60,11 @@ class Settings(BaseSettings):
     Apps in GitHub). None disables the "Sign in with GitHub" flow - email +
     password login still works without them."""
 
+    max_upload_size_mb: int = 10
+    """Rejects a /records/upload file larger than this (see main.py) - a
+    real client data export is nowhere near this size, and without a cap
+    the whole file is read into memory before tidycsv/pandas ever sees it,
+    which makes an oversized upload a cheap way to flood the service."""
+
 
 settings = Settings()

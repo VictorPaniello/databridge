@@ -66,13 +66,34 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+_MAX_UPLOAD_BYTES = settings.max_upload_size_mb * 1024 * 1024
+_UPLOAD_CHUNK_BYTES = 1024 * 1024
+
+
+async def _read_upload_within_limit(file: UploadFile) -> bytes:
+    """Reads in bounded chunks and aborts as soon as the limit is crossed,
+    rather than trusting the Content-Length header (a client can send
+    whatever it wants there) or reading the whole body before checking."""
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await file.read(_UPLOAD_CHUNK_BYTES):
+        total += len(chunk)
+        if total > _MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File exceeds the {settings.max_upload_size_mb} MB upload limit",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 @app.post("/records/upload", response_model=IngestResult)
 async def upload_records(
     file: UploadFile,
     db: Session = Depends(get_db),
     user: User = Depends(current_active_user),
 ) -> IngestResult:
-    content = await file.read()
+    content = await _read_upload_within_limit(file)
     schema = load_schema()
     inserted, stats = ingest_file(db, file.filename or "upload.csv", content, schema, user.id)
     return IngestResult(
