@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 import uuid
 
-from fastapi import Depends, Response
+from fastapi import Depends, Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordBearer
 from fastapi_users import BaseUserManager, FastAPIUsers, InvalidPasswordException, UUIDIDMixin
@@ -18,6 +18,12 @@ from fastapi_users.authentication.transport.base import (
     TransportLogoutNotSupportedError,
 )
 from fastapi_users.db import SQLAlchemyUserDatabase
+from fastapi_users.router.oauth import (
+    CSRF_TOKEN_COOKIE_NAME,
+    CSRF_TOKEN_KEY,
+    generate_csrf_token,
+    generate_state_token,
+)
 from fastapi_users.schemas import BaseUser, BaseUserCreate, BaseUserUpdate
 from httpx_oauth.clients.github import GitHubOAuth2
 from pydantic import Field
@@ -167,3 +173,53 @@ def get_github_oauth_client() -> GitHubOAuth2 | None:
     if not settings.github_client_id or not settings.github_client_secret:
         return None
     return GitHubOAuth2(settings.github_client_id, settings.github_client_secret)
+
+
+def make_github_authorize_redirect(github_oauth_client: GitHubOAuth2):
+    """Returns a route handler replacing fastapi-users' own GET
+    /auth/github/authorize (see main.py, which swaps it in the same way it
+    already swaps rate-limited endpoints onto the auth routers below) -
+    reuses the exact CSRF/state generation fastapi-users' own route uses
+    (imported directly from fastapi_users.router.oauth above, not
+    reimplemented) but returns a real 302 to GitHub instead of a JSON
+    body. Takes the already-constructed oauth client as a parameter
+    (closed over below) rather than calling get_github_oauth_client()
+    again, so it's guaranteed to be the exact same client instance the
+    surrounding router was built with - not a second, separately
+    constructed one that happens to hold the same credentials.
+
+    Why a redirect at all: the frontend SPA lives on a different origin
+    than this API. The library's default /authorize is meant to be called
+    via fetch() from a SPA, which then navigates the browser to the JSON
+    body's authorization_url itself - but that means the CSRF cookie this
+    route sets gets set from a *cross-origin* fetch, which browsers that
+    block third-party cookies by default (Chrome among them, as of when
+    this was written) silently drop - discovered for real: this project's
+    frontend hit OAUTH_INVALID_STATE on every attempt, `credentials:
+    "include"` on the fetch included, until traced to this. Making this
+    endpoint itself a redirect means the browser's own top-level
+    navigation to *this* domain is what sets the cookie - first-party
+    from this domain's own point of view, same as the /callback
+    navigation right after it."""
+
+    async def github_authorize_redirect(request: Request) -> RedirectResponse:
+        csrf_token = generate_csrf_token()
+        state = generate_state_token({CSRF_TOKEN_KEY: csrf_token}, settings.jwt_secret)
+        callback_url = str(request.url_for("oauth:github.jwt-oauth-redirect.callback"))
+        authorization_url = await github_oauth_client.get_authorization_url(
+            callback_url, state
+        )
+
+        response = RedirectResponse(authorization_url)
+        response.set_cookie(
+            CSRF_TOKEN_COOKIE_NAME,
+            csrf_token,
+            max_age=3600,
+            path="/",
+            secure=True,
+            httponly=True,
+            samesite="lax",
+        )
+        return response
+
+    return github_authorize_redirect

@@ -26,6 +26,7 @@ from databridge.auth import (
     current_active_user,
     fastapi_users,
     get_github_oauth_client,
+    make_github_authorize_redirect,
     oauth_redirect_backend,
 )
 from databridge.auth_models import User
@@ -87,24 +88,31 @@ app.include_router(
 
 _github_oauth_client = get_github_oauth_client()
 if _github_oauth_client is not None:
-    app.include_router(
-        fastapi_users.get_oauth_router(
-            _github_oauth_client,
-            # oauth_redirect_backend, not auth_backend: the callback ends
-            # with a 302 to the frontend carrying the JWT in the URL
-            # fragment (see auth.py's RedirectTransport), instead of a bare
-            # JSON body on the API's own origin - regular email+password
-            # login is untouched, still bearer_transport/auth_backend.
-            oauth_redirect_backend,
-            settings.jwt_secret,
-            # A user who registered with email+password and later signs in
-            # with GitHub using the same email gets linked to that same
-            # account instead of silently creating a second one.
-            associate_by_email=True,
-        ),
-        prefix="/auth/github",
-        tags=["auth"],
+    _github_router = fastapi_users.get_oauth_router(
+        _github_oauth_client,
+        # oauth_redirect_backend, not auth_backend: the callback ends
+        # with a 302 to the frontend carrying the JWT in the URL
+        # fragment (see auth.py's RedirectTransport), instead of a bare
+        # JSON body on the API's own origin - regular email+password
+        # login is untouched, still bearer_transport/auth_backend.
+        oauth_redirect_backend,
+        settings.jwt_secret,
+        # A user who registered with email+password and later signs in
+        # with GitHub using the same email gets linked to that same
+        # account instead of silently creating a second one.
+        associate_by_email=True,
     )
+    # /authorize's own default response is JSON (meant to be fetch()'d by
+    # a SPA), which breaks the CSRF cookie it sets under third-party-
+    # cookie-blocking browsers when the SPA is on a different origin -
+    # see github_authorize_redirect's docstring. Swapped the same way
+    # rate limiting is swapped onto /login and /register above: mutating
+    # the sub-router's route before include_router() re-derives the final
+    # route (dependant included) from the mutated endpoint.
+    for _route in _github_router.routes:
+        if _route.path == "/authorize":
+            _route.endpoint = make_github_authorize_redirect(_github_oauth_client)
+    app.include_router(_github_router, prefix="/auth/github", tags=["auth"])
 
 
 @app.get("/health")
