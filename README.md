@@ -89,8 +89,9 @@ tidycsv (schema-driven cleaning, validation)
 PostgreSQL (client_records, webhook_deliveries)
       │
       ▼
-Outbound webhook (best-effort - a failed delivery never fails the ingest,
-                   it's logged and the data is already safely persisted)
+Outbound webhook (retried with backoff on failure - a failed delivery
+                   never fails the ingest, it's retried and logged, and
+                   the data is already safely persisted either way)
 ```
 
 `config.py` holds every environment-dependent value (database URL, webhook
@@ -101,9 +102,26 @@ Each webhook delivery is signed: `X-Databridge-Signature-256` is an
 HMAC-SHA256 of the exact request body, keyed with `WEBHOOK_SECRET` - the
 same pattern Stripe and GitHub use, so a receiver can verify both that the
 request actually came from databridge and that the body wasn't altered in
-transit, without the secret itself ever going out on the wire.
+transit, without the secret itself ever going out on the wire. The same
+signed body is replayed on every retry rather than re-signed per attempt,
+so a receiver verifying the signature sees an identical payload whether
+delivery succeeded on the first try or the third.
 `examples/webhook_receiver.py` is a runnable reference receiver showing
 the verification side of that.
+
+**Retries**: a failed delivery (a non-2xx response, a timeout, a
+connection error) is retried with exponential backoff -
+`WEBHOOK_MAX_ATTEMPTS` tries total (default 3), `WEBHOOK_RETRY_BACKOFF_SECONDS`
+as the base delay before the first retry, doubling each time after (1s,
+2s, ... by default). Every attempt gets its own `WebhookDelivery` row
+(`GET /records/{id}/webhooks` returns the full history, in order, not
+just the latest attempt), so the audit trail shows exactly what was tried
+and when, not just the final outcome. This previously was a single
+best-effort attempt - a receiver's brief outage (a deploy, a cold start,
+a transient 5xx) meant the notification was simply lost. See [What it
+doesn't do (yet)](#what-it-doesnt-do-yet) for the real tradeoff this
+still carries: retries run synchronously inside the same upload request,
+not as a background job.
 
 ## Local development
 
@@ -404,8 +422,15 @@ project's own code or in actually deploying it:
 
 - Single schema for the whole service - a real multi-tenant version would
   need a schema per client, not one shared `examples/schema.yaml`.
-- No webhook retry logic - a failed delivery is logged, not automatically
-  retried.
+- **Webhook retries run synchronously, inside the same upload request**
+  (see [Architecture](#architecture)) - not as a separate background job,
+  since there's no queue/broker in this project. A receiver that's fully
+  down adds real, visible latency to that one upload's response (up to
+  ~3s with the default backoff schedule) instead of the retries happening
+  invisibly after the response has already gone back. A real
+  multi-tenant version would move this to a background worker with
+  durable retry state, so a process restart mid-retry can't lose an
+  in-flight attempt the way it currently could.
 - No email verification - fastapi-users supports it, but this project
   deliberately doesn't enforce it: real Resend delivery only reaches the
   Resend account's own address without a verified custom domain (see

@@ -22,6 +22,10 @@ export interface WebhookDelivery {
   status_code: number | null;
   success: boolean;
   error: string | null;
+  // 1 for the first try, 2+ for each retry after it (up to the
+  // backend's webhook_max_attempts) - one row per attempt, not one row
+  // overwritten in place, so a record can have several of these.
+  attempt_number: number;
   attempted_at: string;
 }
 

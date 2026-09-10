@@ -38,6 +38,24 @@ class Settings(BaseSettings):
     webhook_secret: str | None = None
     """Shared secret sent as a header on every webhook delivery, so the
     receiver can verify the request actually came from this service."""
+    webhook_max_attempts: int = 3
+    """Total attempts (the first try plus retries) before a delivery is
+    given up on. Previously this was a single best-effort POST - a
+    receiver's brief outage (a deploy, a cold start, a transient 5xx)
+    meant the notification was simply lost, logged but never tried
+    again. Each attempt gets its own WebhookDelivery row (see models.py),
+    so the audit trail shows every try, not just the last one."""
+    webhook_retry_backoff_seconds: float = 1.0
+    """Base delay before the first retry; each subsequent retry doubles
+    it (1s, 2s, 4s, ... - see webhooks.py's _backoff_seconds). Kept tiny
+    in tests via monkeypatching this setting, not by changing the retry
+    logic itself. Runs synchronously inside the same upload request
+    (already offloaded to a worker thread, see main.py's use of
+    run_in_threadpool) rather than as a separate background job - no
+    queue/broker infrastructure exists in this project (see README's
+    "What it doesn't do (yet)"), so a slow/down receiver adds real
+    latency to that one upload response instead of failing silently;
+    an explicit, documented tradeoff, not an oversight."""
 
     schema_path: str = "examples/schema.yaml"
     """Path to the tidycsv schema, resolved relative to the process's

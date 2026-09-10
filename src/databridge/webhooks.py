@@ -1,13 +1,21 @@
 """Outbound webhook delivery. A failed delivery must never fail the ingest
 request that triggered it - the record is already safely persisted by the
 time we attempt to notify anyone, so a network blip on the receiving end is
-the receiver's problem to retry, not a reason to roll back real data."""
+the receiver's problem to retry, not a reason to roll back real data.
+
+Previously a single best-effort POST: one attempt, logged whether it
+succeeded or not, never tried again. A receiver's brief outage (a deploy,
+a cold start, a transient 5xx) meant the notification was simply lost.
+notify_new_record() now retries with exponential backoff, up to
+settings.webhook_max_attempts total tries, persisting one WebhookDelivery
+row per attempt so the audit trail shows the full retry history."""
 
 from __future__ import annotations
 
 import hashlib
 import hmac
 import json
+import time
 
 import httpx
 from sqlalchemy.orm import Session
@@ -16,6 +24,14 @@ from databridge.config import settings
 from databridge.models import ClientRecord, WebhookDelivery
 
 TIMEOUT_SECONDS = 5.0
+
+
+def _backoff_seconds(attempt: int) -> float:
+    """Delay before retrying after `attempt` (1-based) has failed: base,
+    2x base, 4x base, ... - settings.webhook_retry_backoff_seconds is the
+    base, so tests can shrink it to keep a retry test fast without
+    changing this formula."""
+    return settings.webhook_retry_backoff_seconds * (2 ** (attempt - 1))
 
 
 def sign_payload(body: bytes, secret: str) -> str:
@@ -47,26 +63,41 @@ def notify_new_record(db: Session, record: ClientRecord) -> WebhookDelivery | No
     }
     # Serialized once, here - so the signature is computed over the exact
     # bytes that get sent, rather than trusting httpx's own json= encoding
-    # to produce identical bytes to whatever we signed separately.
+    # to produce identical bytes to whatever we signed separately. Signed
+    # once too: the same body and signature are replayed on every retry,
+    # not re-signed per attempt - a receiver verifying the signature sees
+    # the identical payload it would have on a single-attempt delivery.
     body = json.dumps(payload).encode("utf-8")
 
     headers = {"Content-Type": "application/json"}
     if settings.webhook_secret:
         headers["X-Databridge-Signature-256"] = sign_payload(body, settings.webhook_secret)
 
-    delivery = WebhookDelivery(record_id=record.id, url=settings.webhook_url, success=False)
-
-    try:
-        response = httpx.post(
-            settings.webhook_url, content=body, headers=headers, timeout=TIMEOUT_SECONDS
+    delivery: WebhookDelivery | None = None
+    for attempt in range(1, settings.webhook_max_attempts + 1):
+        delivery = WebhookDelivery(
+            record_id=record.id, url=settings.webhook_url, success=False, attempt_number=attempt
         )
-        delivery.status_code = response.status_code
-        delivery.success = response.is_success
-        if not response.is_success:
-            delivery.error = f"non-2xx response: {response.status_code}"
-    except httpx.HTTPError as exc:
-        delivery.error = f"{type(exc).__name__}: {exc}"
+        try:
+            response = httpx.post(
+                settings.webhook_url, content=body, headers=headers, timeout=TIMEOUT_SECONDS
+            )
+            delivery.status_code = response.status_code
+            delivery.success = response.is_success
+            if not response.is_success:
+                delivery.error = f"non-2xx response: {response.status_code}"
+        except httpx.HTTPError as exc:
+            delivery.error = f"{type(exc).__name__}: {exc}"
 
-    db.add(delivery)
-    db.commit()
+        db.add(delivery)
+        db.commit()
+
+        if delivery.success:
+            return delivery
+        if attempt < settings.webhook_max_attempts:
+            time.sleep(_backoff_seconds(attempt))
+
+    # Every attempt failed - the last delivery row (already persisted
+    # above, success=False) is the one callers get back, the same
+    # contract as before retries existed.
     return delivery

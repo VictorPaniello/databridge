@@ -34,6 +34,7 @@ class WebhookDeliveryOut(BaseModel):
     status_code: int | None
     success: bool
     error: str | None
+    attempt_number: int
     attempted_at: datetime
 
 

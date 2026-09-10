@@ -269,7 +269,15 @@ def get_record_webhooks(
     user: User = Depends(current_active_user),
 ) -> list:
     _get_owned_record(db, record_id, user)
-    query = select(WebhookDelivery).where(WebhookDelivery.record_id == record_id)
+    # Ordered explicitly - now that a single delivery can produce several
+    # rows (one per retry attempt, see webhooks.py), an unordered query
+    # no longer reliably reads as "the retry history in order it
+    # happened" the way a single-row-per-delivery result always did.
+    query = (
+        select(WebhookDelivery)
+        .where(WebhookDelivery.record_id == record_id)
+        .order_by(WebhookDelivery.attempted_at, WebhookDelivery.id)
+    )
     return db.execute(query).scalars().all()
 
 

@@ -7,6 +7,28 @@ nothing has been tagged as a release yet, so everything below is under
 ## [Unreleased]
 
 ### Added
+- **Webhook delivery retries.** `notify_new_record()` used to make a
+  single best-effort POST - a receiver's brief outage (a deploy, a cold
+  start, a transient 5xx) meant the notification was simply lost, logged
+  but never tried again. It now retries with exponential backoff, up to
+  `WEBHOOK_MAX_ATTEMPTS` total tries (default 3, `WEBHOOK_RETRY_BACKOFF_SECONDS`
+  as the base delay, doubling each retry). A new `attempt_number` column
+  on `webhook_deliveries` (migration `9fd2d1b03bea`, backfilled to 1 for
+  every pre-existing row via `server_default` rather than left nullable)
+  means one row per attempt, not one row overwritten in place, so
+  `GET /records/{id}/webhooks` (now explicitly ordered by `attempted_at`)
+  shows the full retry history for a record. The same signed request
+  body is replayed on every retry rather than re-signed per attempt.
+  Verified against a real local HTTP server that fails its first N
+  requests and then succeeds (`tests/test_webhooks.py`'s
+  `_FlakyHandler`), not a mocked `httpx.post` - one test proves it
+  eventually succeeds and stops retrying once it does, another proves it
+  gives up after exactly `webhook_max_attempts` tries and every attempt
+  is logged. Runs synchronously inside the same upload request (already
+  offloaded to a worker thread) rather than as a background job - no
+  queue/broker exists in this project - see
+  [What it doesn't do (yet)](../README.md#what-it-doesnt-do-yet) for
+  that explicit tradeoff.
 - Frontend: real brand colors (emerald/stone, from Tailwind's own
   palette) replacing the placeholder blue/slate scheme, applied as CSS
   variables so the favicon and every page share one source of truth,

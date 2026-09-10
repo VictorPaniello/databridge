@@ -99,3 +99,102 @@ def test_sign_payload_matches_a_reference_hmac_implementation():
     secret = "some-secret"
     expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
     assert sign_payload(body, secret) == expected
+
+
+class _FlakyHandler(BaseHTTPRequestHandler):
+    """A real local HTTP server (not a mock) that fails its first N
+    requests with a 500 and succeeds on every request after that - proves
+    notify_new_record() actually retries against a real receiver, the
+    same way test_webhooks.py's other tests prove the signature against a
+    real one, rather than trusting a mocked httpx.post() to reflect what
+    a real flaky endpoint does."""
+
+    fail_first_n: int = 0
+    received: list[dict] = []
+
+    def do_POST(self):  # noqa: N802
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length)
+        _FlakyHandler.received.append({"body": body})
+        if len(_FlakyHandler.received) <= _FlakyHandler.fail_first_n:
+            self.send_response(500)
+        else:
+            self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+
+@pytest.fixture
+def flaky_webhook_receiver(monkeypatch):
+    """Same shape as webhook_receiver above, but backed by _FlakyHandler
+    and with retry backoff shrunk to keep the test fast - the backoff
+    formula itself (webhooks.py's _backoff_seconds) is unaffected, only
+    its base delay is, the same way test_upload_exceeding_size_limit
+    shrinks _MAX_UPLOAD_BYTES instead of building a real multi-MB file."""
+    _FlakyHandler.received = []
+    _FlakyHandler.fail_first_n = 0
+    server = HTTPServer(("127.0.0.1", 0), _FlakyHandler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    import databridge.config as config_module
+
+    monkeypatch.setattr(config_module.settings, "webhook_url", f"http://127.0.0.1:{port}/")
+    monkeypatch.setattr(config_module.settings, "webhook_secret", None)
+    monkeypatch.setattr(config_module.settings, "webhook_retry_backoff_seconds", 0.01)
+
+    yield _FlakyHandler
+    server.shutdown()
+
+
+def _upload_single_row(client: TestClient):
+    """A one-row CSV (same header shape as examples/messy_clients.csv) so
+    exactly one webhook delivery sequence fires - messy_clients.csv has
+    5 rows, all newly ingested, which would fire 5 independent retry
+    sequences against the shared flaky_webhook_receiver and make its raw
+    request count mean "5 records x N attempts" instead of just N."""
+    csv_body = (
+        "Customer,Contact Email,Order Date,Order Total,Mobile Number\n"
+        "Ada Lovelace,ada@shop.com,2026-09-01,100.00,+34 600 00 00 00\n"
+    )
+    return client.post(
+        "/records/upload",
+        files={"file": ("single.csv", csv_body.encode(), "text/csv")},
+    )
+
+
+def test_retries_and_eventually_succeeds_against_a_real_flaky_receiver(
+    client: TestClient, flaky_webhook_receiver
+):
+    flaky_webhook_receiver.fail_first_n = 2  # 500, 500, then a real 200
+
+    response = _upload_single_row(client)
+    record_id = response.json()["records"][0]["id"]
+
+    assert len(flaky_webhook_receiver.received) == 3  # first try + 2 retries
+
+    deliveries = client.get(f"/records/{record_id}/webhooks").json()
+    assert [d["attempt_number"] for d in deliveries] == [1, 2, 3]
+    assert [d["success"] for d in deliveries] == [False, False, True]
+    assert deliveries[0]["status_code"] == 500
+    assert deliveries[2]["status_code"] == 200
+
+
+def test_gives_up_after_max_attempts_and_logs_every_one(
+    client: TestClient, flaky_webhook_receiver
+):
+    flaky_webhook_receiver.fail_first_n = 999  # never succeeds
+
+    response = _upload_single_row(client)
+    record_id = response.json()["records"][0]["id"]
+
+    # settings.webhook_max_attempts defaults to 3 - every one of them was
+    # actually tried against the real receiver, not just the first.
+    assert len(flaky_webhook_receiver.received) == 3
+
+    deliveries = client.get(f"/records/{record_id}/webhooks").json()
+    assert [d["attempt_number"] for d in deliveries] == [1, 2, 3]
+    assert all(d["success"] is False for d in deliveries)

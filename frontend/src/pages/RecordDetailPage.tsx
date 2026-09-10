@@ -99,6 +99,7 @@ export function RecordDetailPage() {
             <table className="w-full text-sm">
               <thead className="bg-secondary text-left text-muted-foreground">
                 <tr>
+                  <th className="px-4 py-2 font-medium">Attempt</th>
                   <th className="px-4 py-2 font-medium">Attempted</th>
                   <th className="px-4 py-2 font-medium">URL</th>
                   <th className="px-4 py-2 font-medium">Status</th>
@@ -108,6 +109,7 @@ export function RecordDetailPage() {
               <tbody>
                 {webhooks.map((w) => (
                   <tr key={w.id} className="border-t border-border">
+                    <td className="px-4 py-2 text-muted-foreground">#{w.attempt_number}</td>
                     <td className="px-4 py-2 text-muted-foreground">
                       {new Date(w.attempted_at).toLocaleString()}
                     </td>

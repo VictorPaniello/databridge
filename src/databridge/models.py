@@ -60,6 +60,11 @@ class WebhookDelivery(Base):
     status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)
     error: Mapped[str | None] = mapped_column(String, nullable=True)
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    """1 for the first try, 2+ for each retry after it (see webhooks.py -
+    up to Settings.webhook_max_attempts total). One row per attempt, not
+    one row overwritten in place, so the audit trail shows the full
+    retry history for a record, not just the final outcome."""
     attempted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
