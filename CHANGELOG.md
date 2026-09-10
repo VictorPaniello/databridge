@@ -7,6 +7,26 @@ nothing has been tagged as a release yet, so everything below is under
 ## [Unreleased]
 
 ### Added
+- Postgres backups: `scripts/backup_db.py` (logic in
+  `src/databridge/backup.py`) runs `pg_dump -Fc` on a schedule and writes
+  dumps to `BACKUP_DIR`, deleting dumps older than
+  `BACKUP_RETENTION_DAYS`. Runs as its own Railway service (Cron Schedule,
+  Custom Start Command, its own Volume mounted at `/data/backups`) rather
+  than inside the main app's container, which is wiped on every deploy.
+  Originally built against Cloudflare R2, reworked to a local/Volume path
+  instead because the user won't provide a credit card to Cloudflare (or
+  any similar service) - no cloud account required this way. Explicit
+  tradeoff, documented in README's Backups section: protects against a
+  mistake or corruption inside the database itself, not against losing
+  the whole Railway project/account. The Docker image now installs
+  `postgresql-client-18` via the PGDG apt repo (the stock Debian package
+  is v15) to match Railway's actual Postgres version (18.6, confirmed via
+  `SHOW server_version` in Railway's Console) - verified for real: built
+  the image, confirmed `pg_dump --version` reports 18.6, then ran the
+  real entrypoint against a real throwaway Postgres inside a container
+  and confirmed the dump parses with `pg_restore --list`.
+
+### Added
 - FastAPI service: `POST /records/upload`, `GET /records`,
   `GET /records/{id}`, `GET /records/{id}/webhooks`, `GET /health`
 - PostgreSQL persistence (SQLAlchemy) with two tables: `client_records` and

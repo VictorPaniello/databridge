@@ -179,6 +179,41 @@ Building the URL from Postgres's individual `PGUSER`/`PGPASSWORD`/`PGHOST`/
 `PGPORT`/`PGDATABASE` variables instead resolved correctly:
 `postgresql+psycopg://${{Postgres.PGUSER}}:${{Postgres.PGPASSWORD}}@${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}`
 
+## Backups
+
+Client data lives in Postgres, so a mistake or corruption there shouldn't be
+unrecoverable. `scripts/backup_db.py` (logic in `src/databridge/backup.py`)
+runs `pg_dump -Fc` against the database and writes the dump to
+`BACKUP_DIR`, then deletes dumps older than `BACKUP_RETENTION_DAYS` (defaults:
+`/data/backups`, 30 days).
+
+On Railway this runs as its **own service** in the same project - same repo/
+image as `databridge`, but with:
+- **Custom Start Command:** `python scripts/backup_db.py`
+- **A Volume** mounted at `/data/backups` - not the app's own container
+  filesystem, which is wiped on every deploy
+- **A Cron Schedule** (Settings > Deploy), daily
+- The same `DATABASE_URL` reference as the main service
+
+**No credit card required.** Cloudflare R2 (and similar off-platform object
+storage) was the first approach tried, but it requires a card on file, which
+this project deliberately avoids - see [What it doesn't do
+(yet)](#what-it-doesnt-do-yet) for the tradeoff that follows from that choice.
+
+**Explicit tradeoff:** this protects against a bad migration, an accidental
+`DROP TABLE`, or similar damage inside the database itself - not against
+losing the whole Railway project or account, since the dumps live on a
+Volume in that same project. A real off-platform backup (S3-compatible
+storage, say) would be the stronger answer, deliberately not done here
+because it required a cloud account the user didn't want to create.
+
+Verified for real, not just "should work": built the actual Docker image,
+confirmed `pg_dump --version` reports 18.6 (matching Railway's server,
+confirmed via `SHOW server_version` in Railway's Console - `postgresql-
+client`'s Debian-stock version is only 15), then ran the real entrypoint
+inside a container against a real throwaway Postgres and confirmed the
+resulting dump parses with `pg_restore --list`.
+
 ## Bugs found while building this
 
 Found and fixed rather than worked around silently - one in `tidycsv`
