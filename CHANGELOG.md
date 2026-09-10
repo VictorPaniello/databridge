@@ -57,6 +57,22 @@ nothing has been tagged as a release yet, so everything below is under
   returned → that token authenticated against `/users/me`.
 
 ### Security
+- **Webhooks sent the raw `WEBHOOK_SECRET` as a header value
+  (`X-Databridge-Secret`) on every delivery**, instead of only ever using
+  it locally to prove authenticity - weaker than necessary, and gave a
+  receiver no way to detect a body tampered with in transit. Replaced
+  with HMAC-SHA256 signing (`X-Databridge-Signature-256: sha256=<hex>`),
+  the same pattern Stripe and GitHub use: the secret never goes out on
+  the wire, and the receiver can verify both sender and integrity by
+  recomputing the HMAC over the raw body it received. Added
+  `examples/webhook_receiver.py`, a runnable reference receiver.
+  Verified for real: a local test suite against a real HTTP server (not
+  a mocked transport) proves a receiver can recompute the exact
+  signature and that a tampered body fails verification; separately ran
+  the actual example receiver as its own process and sent it a real
+  webhook end to end - correct secret verified and logged the event,
+  wrong secret got a real 401, both persisted correctly to
+  `webhook_deliveries`.
 - **`JWT_SECRET` was never set in Railway** - production was signing every
   login token with the obviously-fake default from `config.py`
   (`insecure-local-dev-secret-do-not-use-in-production`), which is right

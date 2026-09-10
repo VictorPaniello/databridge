@@ -89,6 +89,14 @@ Outbound webhook (best-effort - a failed delivery never fails the ingest,
 URL/secret, schema path) - nothing is hardcoded, so the same image runs
 locally, in CI, and in production with different environment variables.
 
+Each webhook delivery is signed: `X-Databridge-Signature-256` is an
+HMAC-SHA256 of the exact request body, keyed with `WEBHOOK_SECRET` - the
+same pattern Stripe and GitHub use, so a receiver can verify both that the
+request actually came from databridge and that the body wasn't altered in
+transit, without the secret itself ever going out on the wire.
+`examples/webhook_receiver.py` is a runnable reference receiver showing
+the verification side of that.
+
 ## Local development
 
 Requires a running PostgreSQL instance.
