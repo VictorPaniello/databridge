@@ -60,7 +60,10 @@ nothing has been tagged as a release yet, so everything below is under
     callback navigation right after it. Verified for real: a real
     (throwaway) FastAPI app + a real `GitHubOAuth2` client asserting
     the redirect target, the cookie, and that the cookie's value
-    matches what's embedded in the state param.
+    matches what's embedded in the state param - and, after deploying,
+    the full flow end to end in a real browser against the real
+    deployed API: GitHub's consent screen, redirected back into the
+    running frontend already signed in.
 - Engineer profile: `first_name`/`last_name` (required at registration)
   and `phone` (optional) on `User`. Nullable at the DB level regardless
   - existing users, and every GitHub OAuth signup (which bypasses
