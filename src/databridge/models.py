@@ -16,6 +16,14 @@ class ClientRecord(Base):
     __tablename__ = "client_records"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
+    )
+    """Which engineer this client record belongs to - the basis for each
+    engineer only seeing their own clients. Nullable because records
+    ingested before authentication existed have no owner; a record with no
+    owner is visible to nobody rather than to everybody, which is the safer
+    failure direction for client data."""
     source_file: Mapped[str] = mapped_column(String, nullable=False)
     full_name: Mapped[str | None] = mapped_column(String, nullable=True)
     email: Mapped[str | None] = mapped_column(String, nullable=True, index=True)

@@ -9,6 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+import databridge.auth_models  # noqa: F401 - registers users/oauth_account on Base.metadata
 from databridge.db import Base, engine, get_db
 from databridge.ingest import ingest_file, load_schema
 from databridge.models import ClientRecord, WebhookDelivery
