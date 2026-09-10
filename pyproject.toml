@@ -47,6 +47,8 @@ select = ["E", "F", "B", "UP"]
 # FastAPI's Depends()-as-default is the documented, idiomatic pattern - not
 # a real "mutable default" bug.
 "src/databridge/main.py" = ["B008"]
+"src/databridge/auth_db.py" = ["B008"]
+"src/databridge/auth.py" = ["B008"]
 # conftest.py must set env vars before importing app modules that read them
 # at import time - imports can't be at the top of the file here.
 "tests/conftest.py" = ["E402"]
