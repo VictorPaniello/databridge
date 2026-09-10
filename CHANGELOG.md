@@ -41,6 +41,19 @@ nothing has been tagged as a release yet, so everything below is under
   `Base.metadata.create_all()` for schema management (see "Fixed" below
   for why).
 
+### Fixed (deployment, continued)
+- Railway crash-looped on `psycopg.errors.DuplicateTable: relation "users"
+  already exists` the moment the Alembic baseline migration deployed. An
+  earlier deploy (before Alembic replaced `create_all()`) had already
+  built the exact same schema on Railway's live database via
+  `Base.metadata.create_all()`, from the same models - so the baseline
+  migration's `CREATE TABLE users` collided with a table that already
+  existed. Since the live schema and what the migration would create are
+  identical, the fix was `alembic stamp head` (mark the migration applied
+  without re-running its DDL) rather than dropping and recreating
+  anything - done as a one-off Dockerfile CMD change for a single deploy,
+  reverted back to `alembic upgrade head` immediately after.
+
 ### Fixed (this project, continued)
 - `Base.metadata.create_all()` only ever creates missing tables - it never
   alters one that already exists. Adding `owner_id` to the already-deployed
