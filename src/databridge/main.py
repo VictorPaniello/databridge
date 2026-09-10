@@ -5,6 +5,10 @@ from __future__ import annotations
 import uuid
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -36,10 +40,32 @@ from databridge.schemas import ClientRecordOut, IngestResult, WebhookDeliveryOut
 # needed adding to an already-deployed table (see CHANGELOG).
 app = FastAPI(title="databridge")
 
-app.include_router(fastapi_users.get_auth_router(auth_backend), prefix="/auth/jwt", tags=["auth"])
-app.include_router(
-    fastapi_users.get_register_router(UserRead, UserCreate), prefix="/auth", tags=["auth"]
-)
+# Rate limiting: a generous default across the whole API as a general flood
+# safety net, with a much stricter limit specifically on /login and
+# /register - the two endpoints a brute-force or credential-stuffing
+# attempt would actually hammer. Keyed on the caller's IP; this relies on
+# get_remote_address reading the real client IP from what Railway's proxy
+# forwards, not uvicorn's own socket peer (see the Dockerfile's
+# --proxy-headers) - otherwise every request behind that proxy would share
+# one bucket and one abusive caller could rate-limit every legitimate one.
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+_STRICT_AUTH_LIMIT = "5/minute"
+
+_jwt_router = fastapi_users.get_auth_router(auth_backend)
+for _route in _jwt_router.routes:
+    if _route.path == "/login":
+        _route.endpoint = limiter.limit(_STRICT_AUTH_LIMIT)(_route.endpoint)
+app.include_router(_jwt_router, prefix="/auth/jwt", tags=["auth"])
+
+_register_router = fastapi_users.get_register_router(UserRead, UserCreate)
+for _route in _register_router.routes:
+    if _route.path == "/register":
+        _route.endpoint = limiter.limit(_STRICT_AUTH_LIMIT)(_route.endpoint)
+app.include_router(_register_router, prefix="/auth", tags=["auth"])
 app.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate), prefix="/users", tags=["users"]
 )

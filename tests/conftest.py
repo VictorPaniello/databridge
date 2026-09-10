@@ -20,7 +20,15 @@ from sqlalchemy.orm import Session
 
 import databridge.auth_models  # noqa: F401 - registers users/oauth_account on Base.metadata
 from databridge.db import Base, SessionLocal, engine, get_db
-from databridge.main import app
+from databridge.main import app, limiter
+
+# The real strict rate limit on /auth/register and /auth/jwt/login (see
+# main.py) would otherwise reject most of this suite - almost every test
+# registers and logs in its own engineer via `client`/`other_client`,
+# easily exceeding 5/minute across a full run. Rate limiting itself is
+# covered by its own dedicated test (test_rate_limit.py), which re-enables
+# the limiter just for that one test.
+limiter.enabled = False
 
 
 @pytest.fixture(autouse=True)
