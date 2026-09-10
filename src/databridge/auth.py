@@ -5,10 +5,11 @@ registered in main.py, using the objects defined here."""
 
 from __future__ import annotations
 
+import re
 import uuid
 
 from fastapi import Depends
-from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin
+from fastapi_users import BaseUserManager, FastAPIUsers, InvalidPasswordException, UUIDIDMixin
 from fastapi_users.authentication import AuthenticationBackend, BearerTransport, JWTStrategy
 from fastapi_users.db import SQLAlchemyUserDatabase
 from fastapi_users.schemas import BaseUser, BaseUserCreate, BaseUserUpdate
@@ -17,6 +18,8 @@ from httpx_oauth.clients.github import GitHubOAuth2
 from databridge.auth_db import get_user_db
 from databridge.auth_models import User
 from databridge.config import settings
+
+MIN_PASSWORD_LENGTH = 8
 
 
 class UserRead(BaseUser[uuid.UUID]):
@@ -37,6 +40,30 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     # project doesn't send those emails yet (see README's "doesn't do yet").
     reset_password_token_secret = settings.jwt_secret
     verification_token_secret = settings.jwt_secret
+
+    async def validate_password(self, password: str, user: UserCreate | User) -> None:
+        """fastapi-users applies no strength requirement by default (a
+        one-character password was accepted before this override - found
+        in a security review). Overriding this is the documented extension
+        point, called on both registration and password change."""
+        if len(password) < MIN_PASSWORD_LENGTH:
+            raise InvalidPasswordException(
+                reason=f"Password must be at least {MIN_PASSWORD_LENGTH} characters long"
+            )
+        if not re.search(r"[A-Z]", password):
+            raise InvalidPasswordException(
+                reason="Password must contain at least one uppercase letter"
+            )
+        if not re.search(r"[a-z]", password):
+            raise InvalidPasswordException(
+                reason="Password must contain at least one lowercase letter"
+            )
+        if not re.search(r"[0-9]", password):
+            raise InvalidPasswordException(reason="Password must contain at least one digit")
+        if not re.search(r"[^A-Za-z0-9]", password):
+            raise InvalidPasswordException(
+                reason="Password must contain at least one special character"
+            )
 
 
 async def get_user_manager(

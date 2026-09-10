@@ -65,7 +65,7 @@ def _authenticated_client() -> TestClient:
     test_client = TestClient(app)
 
     email = f"test-{uuid.uuid4()}@example.com"
-    password = "test-password-not-real-123"
+    password = "Test-Password-Not-Real-123!"
     register_resp = test_client.post(
         "/auth/register", json={"email": email, "password": password}
     )

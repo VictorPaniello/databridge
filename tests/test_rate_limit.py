@@ -40,7 +40,7 @@ def test_register_is_rate_limited_after_repeated_attempts():
         statuses = [
             client.post(
                 "/auth/register",
-                json={"email": f"ratelimit-{i}@example.com", "password": "some-password-123"},
+                json={"email": f"ratelimit-{i}@example.com", "password": "Some-Password-123!"},
             ).status_code
             for i in range(6)
         ]
