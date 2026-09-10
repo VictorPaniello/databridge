@@ -1,4 +1,4 @@
-import type { ClientRecord, CurrentUser, IngestResult, WebhookDelivery } from "./types";
+import type { ClientRecord, CurrentUser, IngestResult, RecordsPage, WebhookDelivery } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL;
 const TOKEN_KEY = "databridge_token";
@@ -220,9 +220,33 @@ export async function uploadFile(file: File): Promise<IngestResult> {
   return request<IngestResult>("/records/upload", { method: "POST", body: formData });
 }
 
+// GET /records is now server-paginated (a hard cap of 500 rows per
+// request - see main.py) rather than returning every matching row in
+// one unbounded response. RecordsPage.tsx still does its filter/search/
+// sort/stats over the *full* set in memory (fine at this project's
+// scale - one engineer's own records), so this walks every page and
+// concatenates them, rather than pushing pagination up into the UI. The
+// win isn't fewer records fetched - it's that no single request (or the
+// one query behind it) is ever unbounded, however large the account
+// grows; a future "load more" UI could reuse this same paginated
+// endpoint without any backend change.
+const MAX_PAGE_SIZE = 500;
+
 export async function listRecords(hasIssues?: boolean): Promise<ClientRecord[]> {
-  const query = hasIssues === undefined ? "" : `?has_issues=${hasIssues}`;
-  return request<ClientRecord[]>(`/records${query}`);
+  const filter = hasIssues === undefined ? "" : `&has_issues=${hasIssues}`;
+  const all: ClientRecord[] = [];
+  let offset = 0;
+
+  while (true) {
+    const page = await request<RecordsPage>(
+      `/records?limit=${MAX_PAGE_SIZE}&offset=${offset}${filter}`,
+    );
+    all.push(...page.items);
+    offset += page.items.length;
+    if (page.items.length === 0 || offset >= page.total) break;
+  }
+
+  return all;
 }
 
 export async function getRecord(id: string): Promise<ClientRecord> {

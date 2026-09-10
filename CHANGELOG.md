@@ -51,6 +51,19 @@ nothing has been tagged as a release yet, so everything below is under
   bootstrapped onto it through an unauthenticated email link - it gets a
   distinct "signs in with GitHub only" response instead, pointing at
   Settings (see above) for adding a password while already signed in.
+- **`GET /records` is now paginated.** It used to return every one of the
+  caller's matching records in a single, unbounded response - fine for a
+  demo account, a real problem the moment a client upload puts tens of
+  thousands of rows behind one engineer (one unbounded query, one
+  unbounded JSON body). Now takes `limit` (default 100, server-enforced
+  hard cap of 500 - not just a default, a caller can't ask for more) and
+  `offset`, and returns `{items, total, limit, offset}` instead of a bare
+  array, so a caller can tell how many more rows exist beyond the page it
+  got. The frontend's `listRecords()` walks every page automatically
+  (500 rows per request) and still returns the full set, so the existing
+  client-side filter/search/sort/stats panel needed no changes - the win
+  isn't fewer rows fetched, it's that no single request (or the query
+  behind it) is ever unbounded, however large an account grows.
 
 ### Fixed
 - **`config.py`'s claim that Resend's shared `onboarding@resend.dev`

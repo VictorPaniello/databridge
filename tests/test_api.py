@@ -59,16 +59,58 @@ def test_reuploading_the_same_file_is_idempotent(client: TestClient):
     second = _upload(client)
     assert second.json()["records"] == []  # nothing new - already ingested by email
 
-    all_records = client.get("/records").json()
-    assert len(all_records) == 5  # not 10
+    page = client.get("/records").json()
+    assert len(page["items"]) == 5  # not 10
+    assert page["total"] == 5
 
 
 def test_list_records_filters_by_has_issues(client: TestClient):
     _upload(client)
     flagged = client.get("/records", params={"has_issues": True}).json()
     clean = client.get("/records", params={"has_issues": False}).json()
-    assert len(flagged) == 3
-    assert len(clean) == 2
+    assert len(flagged["items"]) == 3
+    assert flagged["total"] == 3
+    assert len(clean["items"]) == 2
+    assert clean["total"] == 2
+
+
+def test_list_records_is_paginated(client: TestClient):
+    _upload(client)  # 5 rows
+
+    first_page = client.get("/records", params={"limit": 2, "offset": 0}).json()
+    assert len(first_page["items"]) == 2
+    assert first_page["total"] == 5  # total reflects every matching row, not just this page
+    assert first_page["limit"] == 2
+    assert first_page["offset"] == 0
+
+    second_page = client.get("/records", params={"limit": 2, "offset": 2}).json()
+    assert len(second_page["items"]) == 2
+    # No overlap between pages
+    first_ids = {r["id"] for r in first_page["items"]}
+    second_ids = {r["id"] for r in second_page["items"]}
+    assert first_ids.isdisjoint(second_ids)
+
+    last_page = client.get("/records", params={"limit": 2, "offset": 4}).json()
+    assert len(last_page["items"]) == 1  # only one row left
+
+
+def test_list_records_rejects_a_limit_above_the_server_side_cap(client: TestClient):
+    # 500 is a hard ceiling, not just a default - a caller can't opt out
+    # of it by asking for more.
+    response = client.get("/records", params={"limit": 501})
+    assert response.status_code == 422
+
+
+def test_list_records_default_limit_covers_a_small_result_set(client: TestClient):
+    # No limit/offset passed at all - the default (100) must still return
+    # every one of the 5 uploaded rows, so existing callers that never
+    # think about pagination keep working exactly as before for realistic
+    # small result sets.
+    _upload(client)
+    page = client.get("/records").json()
+    assert len(page["items"]) == 5
+    assert page["limit"] == 100
+    assert page["offset"] == 0
 
 
 def test_get_single_record(client: TestClient):
@@ -123,8 +165,8 @@ def test_engineer_cannot_see_another_engineers_records(
     # cross-engineer isolation is being tested here, not dedup.
     assert len(_upload(client).json()["records"]) == 0
 
-    my_view = client.get("/records").json()
-    other_view = other_client.get("/records").json()
+    my_view = client.get("/records").json()["items"]
+    other_view = other_client.get("/records").json()["items"]
     assert {r["id"] for r in my_view} == {r["id"] for r in my_records}
     assert {r["id"] for r in other_view}.isdisjoint({r["id"] for r in my_records})
 
@@ -149,7 +191,7 @@ def test_delete_record_actually_removes_it(client: TestClient):
     # Really gone, not soft-deleted - the same 404 an ID that never existed
     # would get, not a "deleted" flag still showing up somewhere.
     assert client.get(f"/records/{record_id}").status_code == 404
-    assert record_id not in {r["id"] for r in client.get("/records").json()}
+    assert record_id not in {r["id"] for r in client.get("/records").json()["items"]}
 
 
 def test_delete_record_cascades_to_its_webhook_deliveries(client: TestClient, db):

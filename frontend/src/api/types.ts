@@ -33,6 +33,17 @@ export interface IngestResult {
   records: ClientRecord[];
 }
 
+// GET /records used to return a bare ClientRecord[] - every matching row
+// in one response. It's now a bounded page (server-enforced limit<=500,
+// see main.py) plus total, so a caller can tell how many more rows exist
+// beyond the ones it got back.
+export interface RecordsPage {
+  items: ClientRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface CurrentUser {
   id: string;
   email: string;

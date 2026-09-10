@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -36,7 +36,7 @@ from databridge.config import settings
 from databridge.db import get_db
 from databridge.ingest import ingest_file, load_schema
 from databridge.models import ClientRecord, WebhookDelivery
-from databridge.schemas import ClientRecordOut, IngestResult, WebhookDeliveryOut
+from databridge.schemas import ClientRecordOut, IngestResult, RecordsPage, WebhookDeliveryOut
 
 # Nothing else in this process configures logging - Python's root logger
 # defaults to WARNING with zero handlers attached, so a plain
@@ -211,20 +211,37 @@ async def upload_records(
     )
 
 
-@app.get("/records", response_model=list[ClientRecordOut])
+@app.get("/records", response_model=RecordsPage)
 def list_records(
     has_issues: bool | None = None,
+    # 500 is a hard ceiling regardless of what a caller asks for, not just
+    # a default - previously this endpoint had no limit at all, so a
+    # client with (say) 50,000 records made one query and one response
+    # body pull every row in at once. 100 is the default page size for a
+    # caller that doesn't ask for a specific one.
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(current_active_user),
-) -> list:
-    query = (
-        select(ClientRecord)
-        .where(ClientRecord.owner_id == user.id)
-        .order_by(ClientRecord.created_at.desc())
-    )
+) -> RecordsPage:
+    base_query = select(ClientRecord).where(ClientRecord.owner_id == user.id)
     if has_issues is not None:
-        query = query.where(ClientRecord.has_issues == has_issues)
-    return db.execute(query).scalars().all()
+        base_query = base_query.where(ClientRecord.has_issues == has_issues)
+
+    # Counted against the same filtered base_query (not a second,
+    # separately-filtered one) so total always matches what has_issues
+    # actually scoped the page to, not the caller's total record count.
+    total = db.execute(select(func.count()).select_from(base_query.subquery())).scalar_one()
+
+    page_query = base_query.order_by(ClientRecord.created_at.desc()).limit(limit).offset(offset)
+    records = db.execute(page_query).scalars().all()
+
+    return RecordsPage(
+        items=[ClientRecordOut.model_validate(r) for r in records],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 def _get_owned_record(db: Session, record_id: uuid.UUID, user: User) -> ClientRecord:

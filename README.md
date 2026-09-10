@@ -40,7 +40,7 @@ company/client parameter, but because each `ClientRecord` has an
 | `GET` | `/auth/github/authorize` | Start "Sign in with GitHub" (only present if `GITHUB_CLIENT_ID`/`SECRET` are set) |
 | `GET` | `/users/me` | The logged-in engineer's own profile |
 | `POST` | `/records/upload` | Upload a CSV/Excel file, clean + persist it (tagged to the caller), fire webhooks for new records |
-| `GET` | `/records` | List **your own** records, optionally `?has_issues=true/false` |
+| `GET` | `/records` | List **your own** records, paginated (`?limit=&offset=`, `limit` capped server-side at 500) and optionally `?has_issues=true/false`; returns `{items, total, limit, offset}` |
 | `GET` | `/records/{id}` | Fetch one of **your own** records - 404 (not 403) if it belongs to someone else, or doesn't exist |
 | `GET` | `/records/{id}/webhooks` | Audit log of webhook delivery attempts for one of your own records |
 | `DELETE` | `/records/{id}` | Permanently erase one of your own records (and its webhook delivery history) - the GDPR right-to-erasure endpoint |
