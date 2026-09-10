@@ -5,16 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { COUNTRY_CODES } from "../data/countryCodes";
-
-// Mirrors auth.py's validate_password - client-side hints only, the
-// backend re-validates and remains the actual source of truth.
-const PASSWORD_RULES = [
-  { test: (p: string) => p.length >= 8, label: "At least 8 characters" },
-  { test: (p: string) => /[A-Z]/.test(p), label: "One uppercase letter" },
-  { test: (p: string) => /[a-z]/.test(p), label: "One lowercase letter" },
-  { test: (p: string) => /[0-9]/.test(p), label: "One digit" },
-  { test: (p: string) => /[^A-Za-z0-9]/.test(p), label: "One special character" },
-];
+import { PASSWORD_RULES } from "../lib/passwordRules";
 
 export function RegisterPage() {
   const { register } = useAuth();
