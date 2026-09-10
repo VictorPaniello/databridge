@@ -66,5 +66,17 @@ class Settings(BaseSettings):
     the whole file is read into memory before tidycsv/pandas ever sees it,
     which makes an oversized upload a cheap way to flood the service."""
 
+    backup_dir: str = "/data/backups"
+    """Where scripts/backup_db.py writes dumps - a Railway Volume mounted
+    on the backup service (see README's Backups section), not the app's
+    own container filesystem, which is wiped on every deploy. Doesn't
+    protect against losing the whole Railway project/account, only against
+    a mistake or corruption inside the database itself - documented as
+    that explicit tradeoff, not glossed over."""
+    backup_retention_days: int = 30
+    """backup_db.py deletes dump files older than this on every run, so
+    the volume doesn't grow forever - not a substitute for actual
+    point-in-time recovery, just bounding how much history is kept."""
+
 
 settings = Settings()
