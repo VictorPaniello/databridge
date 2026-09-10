@@ -67,7 +67,13 @@ def _authenticated_client() -> TestClient:
     email = f"test-{uuid.uuid4()}@example.com"
     password = "Test-Password-Not-Real-123!"
     register_resp = test_client.post(
-        "/auth/register", json={"email": email, "password": password}
+        "/auth/register",
+        json={
+            "email": email,
+            "password": password,
+            "first_name": "Test",
+            "last_name": "Engineer",
+        },
     )
     assert register_resp.status_code == 201, register_resp.text
     login_resp = test_client.post(

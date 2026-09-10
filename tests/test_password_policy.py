@@ -24,7 +24,13 @@ def test_weak_password_is_rejected(password: str, expected_reason_fragment: str)
 
     client = TestClient(app)
     response = client.post(
-        "/auth/register", json={"email": "weak-password@example.com", "password": password}
+        "/auth/register",
+        json={
+            "email": "weak-password@example.com",
+            "password": password,
+            "first_name": "Weak",
+            "last_name": "Password",
+        },
     )
     assert response.status_code == 400
     reason = response.json()["detail"]["reason"]
@@ -37,6 +43,11 @@ def test_strong_password_is_accepted():
     client = TestClient(app)
     response = client.post(
         "/auth/register",
-        json={"email": "strong-password@example.com", "password": "Str0ng-Pass!"},
+        json={
+            "email": "strong-password@example.com",
+            "password": "Str0ng-Pass!",
+            "first_name": "Strong",
+            "last_name": "Password",
+        },
     )
     assert response.status_code == 201
