@@ -1,0 +1,6 @@
+Customer,Contact Email,Order Date,Order Total,Mobile Number
+Sofia Reyes,SOFIA.REYES@shop.com,2026/09/01,"1,050.00",+34 611 22 33 44
+Tom O'Brien,tom@shop.com,09-01-2026,220,611223355
+,noemail@shop.com,2026-09-05,75.5,
+Léa Dubois,not-an-email,Sept 3 2026,"99,99",+33 6 12 34 56 78
+Marco Rossi,marco@shop.com,invalid-date,310.00,3391234567

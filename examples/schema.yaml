@@ -1,0 +1,24 @@
+fields:
+  - name: full_name
+    aliases: ["name", "Full Name", "Nombre", "Customer"]
+    type: string
+    required: true
+
+  - name: email
+    aliases: ["e-mail", "Email Address", "correo", "Contact Email"]
+    type: email
+    required: true
+
+  - name: signup_date
+    aliases: ["Signup Date", "fecha_alta", "Order Date"]
+    type: date
+
+  - name: amount
+    aliases: ["Amount", "Total ($)", "importe", "Order Total"]
+    type: currency
+
+  - name: phone
+    aliases: ["Phone", "Telefono", "Mobile Number"]
+    type: phone
+
+key_columns: ["email"]
