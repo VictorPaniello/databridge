@@ -60,6 +60,15 @@ class Settings(BaseSettings):
     Apps in GitHub). None disables the "Sign in with GitHub" flow - email +
     password login still works without them."""
 
+    frontend_url: str = "http://localhost:5173"
+    """Origin of the frontend SPA (frontend/). Used two ways: (1) CORS -
+    the only origin allowed to call this API with credentials from a
+    browser; (2) after a successful GitHub OAuth login, the backend
+    redirects the browser here (to `<frontend_url>/auth/callback#access_
+    token=...`) instead of returning a bare JSON body - see auth.py's
+    RedirectTransport. Vite's dev server default is the localhost value
+    above; production sets the real deployed frontend URL."""
+
     max_upload_size_mb: int = 10
     """Rejects a /records/upload file larger than this (see main.py) - a
     real client data export is nowhere near this size, and without a cap

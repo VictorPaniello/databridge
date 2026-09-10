@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -25,6 +26,7 @@ from databridge.auth import (
     current_active_user,
     fastapi_users,
     get_github_oauth_client,
+    oauth_redirect_backend,
 )
 from databridge.auth_models import User
 from databridge.config import settings
@@ -40,6 +42,18 @@ from databridge.schemas import ClientRecordOut, IngestResult, WebhookDeliveryOut
 # tables, never altered existing ones - real bugs found once a column
 # needed adding to an already-deployed table (see CHANGELOG).
 app = FastAPI(title="databridge")
+
+# Only the configured frontend origin may call this API from a browser -
+# not "*", since credentialed requests (the Authorization header the SPA
+# sends on every authenticated call) are never allowed with a wildcard
+# origin anyway, and there's exactly one legitimate frontend for this API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_url],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Rate limiting: a generous default across the whole API as a general flood
 # safety net, with a much stricter limit specifically on /login and
@@ -76,7 +90,12 @@ if _github_oauth_client is not None:
     app.include_router(
         fastapi_users.get_oauth_router(
             _github_oauth_client,
-            auth_backend,
+            # oauth_redirect_backend, not auth_backend: the callback ends
+            # with a 302 to the frontend carrying the JWT in the URL
+            # fragment (see auth.py's RedirectTransport), instead of a bare
+            # JSON body on the API's own origin - regular email+password
+            # login is untouched, still bearer_transport/auth_backend.
+            oauth_redirect_backend,
             settings.jwt_secret,
             # A user who registered with email+password and later signs in
             # with GitHub using the same email gets linked to that same

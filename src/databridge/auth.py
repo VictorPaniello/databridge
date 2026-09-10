@@ -8,9 +8,15 @@ from __future__ import annotations
 import re
 import uuid
 
-from fastapi import Depends
+from fastapi import Depends, Response
+from fastapi.responses import RedirectResponse
+from fastapi.security import OAuth2PasswordBearer
 from fastapi_users import BaseUserManager, FastAPIUsers, InvalidPasswordException, UUIDIDMixin
 from fastapi_users.authentication import AuthenticationBackend, BearerTransport, JWTStrategy
+from fastapi_users.authentication.transport.base import (
+    Transport,
+    TransportLogoutNotSupportedError,
+)
 from fastapi_users.db import SQLAlchemyUserDatabase
 from fastapi_users.schemas import BaseUser, BaseUserCreate, BaseUserUpdate
 from httpx_oauth.clients.github import GitHubOAuth2
@@ -82,6 +88,51 @@ def get_jwt_strategy() -> JWTStrategy:
 auth_backend = AuthenticationBackend(
     name="jwt",
     transport=bearer_transport,
+    get_strategy=get_jwt_strategy,
+)
+
+
+class RedirectTransport(Transport):
+    """Used only for the GitHub OAuth callback, never for regular
+    email+password login (that stays on bearer_transport/auth_backend,
+    unchanged). fastapi-users' oauth router always ends by calling
+    `backend.login(strategy, user)` and returning whatever Response that
+    gives back - with BearerTransport that's a raw JSON body, which would
+    leave a browser sitting on an ugly JSON page on the API's own origin
+    after GitHub redirects it to /auth/github/callback, instead of back in
+    the SPA. A custom Transport is fastapi-users' own supported extension
+    point for changing that response shape (same Protocol BearerTransport
+    and CookieTransport implement) - not a bypass of its auth/CSRF logic,
+    which is untouched.
+
+    The token goes in the URL fragment (`#access_token=...`), not a query
+    string: fragments are never sent to the server in the request line or
+    logged by it, and the frontend's callback route reads it client-side
+    with `window.location.hash` and clears it immediately after."""
+
+    scheme = OAuth2PasswordBearer(tokenUrl="auth/jwt/login", auto_error=False)
+
+    def __init__(self, redirect_url: str):
+        self.redirect_url = redirect_url
+
+    async def get_login_response(self, token: str) -> Response:
+        return RedirectResponse(f"{self.redirect_url}#access_token={token}", status_code=302)
+
+    async def get_logout_response(self) -> Response:
+        raise TransportLogoutNotSupportedError()
+
+    @staticmethod
+    def get_openapi_login_responses_success() -> dict:
+        return {}
+
+    @staticmethod
+    def get_openapi_logout_responses_success() -> dict:
+        return {}
+
+
+oauth_redirect_backend = AuthenticationBackend(
+    name="jwt-oauth-redirect",
+    transport=RedirectTransport(f"{settings.frontend_url}/auth/callback"),
     get_strategy=get_jwt_strategy,
 )
 
