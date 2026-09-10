@@ -11,9 +11,10 @@ type Filter = "all" | "clean" | "flagged";
 
 // full_name/email/signup_date sort alphabetically (signup_date is stored
 // as an ISO-ish string, so alphabetical order already matches chronological
-// order); amount sorts numerically - the two comparators the user actually
-// asked for, not just alphabetical everywhere.
-type SortKey = "full_name" | "email" | "signup_date" | "amount";
+// order); amount sorts numerically; has_issues (Status) sorts by its
+// Clean/Flagged label, alphabetically - Clean before Flagged ascending,
+// same string-comparator behavior as the other non-numeric columns.
+type SortKey = "full_name" | "email" | "signup_date" | "amount" | "has_issues";
 type SortDirection = "asc" | "desc";
 interface SortState {
   key: SortKey;
@@ -22,9 +23,14 @@ interface SortState {
 
 const NUMERIC_SORT_KEYS: SortKey[] = ["amount"];
 
+function sortValue(record: ClientRecord, key: SortKey): string | number | null {
+  if (key === "has_issues") return record.has_issues ? "Flagged" : "Clean";
+  return record[key];
+}
+
 function compareRecords(a: ClientRecord, b: ClientRecord, sort: SortState): number {
-  const av = a[sort.key];
-  const bv = b[sort.key];
+  const av = sortValue(a, sort.key);
+  const bv = sortValue(b, sort.key);
   // Nulls always sort last regardless of direction - an unfilled field
   // isn't meaningfully "before" or "after" real data.
   if (av == null && bv == null) return 0;
@@ -32,8 +38,8 @@ function compareRecords(a: ClientRecord, b: ClientRecord, sort: SortState): numb
   if (bv == null) return -1;
 
   const cmp = NUMERIC_SORT_KEYS.includes(sort.key)
-    ? parseFloat(av) - parseFloat(bv)
-    : av.localeCompare(bv);
+    ? parseFloat(av as string) - parseFloat(bv as string)
+    : (av as string).localeCompare(bv as string);
 
   return sort.direction === "asc" ? cmp : -cmp;
 }
@@ -236,7 +242,12 @@ export function RecordsPage() {
                   onSort={handleSort}
                 />
                 <SortableHeader label="Amount" sortKey="amount" sort={sort} onSort={handleSort} />
-                <th className="px-4 py-2 font-medium">Status</th>
+                <SortableHeader
+                  label="Status"
+                  sortKey="has_issues"
+                  sort={sort}
+                  onSort={handleSort}
+                />
                 <th className="px-4 py-2 font-medium" />
               </tr>
             </thead>
