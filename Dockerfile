@@ -2,7 +2,25 @@ FROM python:3.12-slim
 
 # git is required here because tidycsv is installed from a GitHub URL, not
 # from PyPI - pip needs git on PATH to clone it during the build.
-RUN apt-get update && apt-get install -y --no-install-recommends git \
+#
+# postgresql-client-18: bookworm's default apt package is only v15, but
+# Railway's Postgres is v18.6 (confirmed via `SHOW server_version` in
+# Railway's Console against the live database) - pg_dump generally refuses
+# to dump a server newer than itself, so the PGDG apt repo is added here to
+# install a version-matched client instead of relying on Debian's stock one.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        curl \
+        gnupg \
+        ca-certificates \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail \
+        https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    && . /etc/os-release \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-18 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -10,6 +28,7 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY examples ./examples
+COPY scripts ./scripts
 COPY alembic.ini ./
 COPY alembic ./alembic
 
