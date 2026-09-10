@@ -89,15 +89,22 @@ class Settings(BaseSettings):
 
     resend_api_key: str | None = None
     """Resend (resend.dev) API key, used by auth.py's UserManager to send
-    forgot-password emails. None disables real delivery - the reset link
-    is logged instead (see on_after_forgot_password), which is fine for
-    local dev but must be set in production or nobody can actually receive
-    a reset link."""
+    forgot-password and verify-email emails. None disables real delivery -
+    the link is logged instead (see _send_email in auth.py), which is
+    fine for local dev but must be set in production or nobody can
+    actually receive one."""
     email_from: str = "databridge <onboarding@resend.dev>"
-    """Resend's shared onboarding@resend.dev sender - delivers to any
-    recipient without verifying a custom sending domain first, which is
-    all this project's scale needs. Swap for a verified domain address if
-    this ever needs a branded From name."""
+    """Resend's shared onboarding@resend.dev sender - works without
+    verifying a custom domain, but ONLY to the Resend account's own
+    email address (confirmed against real production sends: a plain
+    recipient and a Gmail "+"-tagged one both failed silently - Resend's
+    API 403s with "You can only send testing emails to your own email
+    address", see https://resend.com/docs/knowledge-base/403-error-resend-dev-domain
+    - _send_email's except clause swallows that the same as any other
+    delivery failure, by design, so nothing user-facing breaks). Real
+    delivery to anyone else needs a verified domain - swap this for a
+    verified-domain address once one exists; until then, production
+    email only actually reaches the account owner."""
 
 
 settings = Settings()

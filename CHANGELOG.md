@@ -65,6 +65,21 @@ nothing has been tagged as a release yet, so everything below is under
   deploy.
 
 ### Fixed
+- **`config.py`'s claim that Resend's shared `onboarding@resend.dev`
+  sender "delivers to any recipient" was wrong.** Found via real
+  production sends, not assumed: a verification email to a Gmail
+  "+"-tagged address and a plain, different address both silently never
+  arrived - traced to Resend's own documented restriction (confirmed at
+  [resend.com/docs/knowledge-base/403-error-resend-dev-domain](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain)):
+  without a verified custom domain, that sender 403s on any recipient
+  other than the Resend account's own email, and `_send_email`'s error
+  handling (by design) swallows that the same as any other delivery
+  failure - so nothing looked broken from the app's side. Every other
+  piece of both email flows (token generation, expiry, single-use, the
+  gates they protect) was independently confirmed working throughout;
+  only real delivery to a third party needs a verified domain, which is a
+  Resend/DNS step, not a code change. Comments in `config.py`,
+  `.env.example`, and the README corrected to say so plainly.
 - **The country-code `<select>`'s option list was barely readable in
   dark mode** - `color-scheme: dark` alone wasn't enough to make the
   native dropdown popup follow the app's theme. Fixed with an explicit

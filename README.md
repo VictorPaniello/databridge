@@ -193,8 +193,18 @@ until `first_name` is set (`PATCH /users/me`).
 
 **Forgot password** (`/forgot-password` → email → `/reset-password?token=...`)
 sends a real email via [Resend](https://resend.com) (`RESEND_API_KEY`,
-optional - unset locally logs the link instead of sending it). A
-GitHub-OAuth-only account (never had a real, user-chosen password) is
+optional - unset locally logs the link instead of sending it). **Real
+delivery currently only reaches the Resend account's own email address** -
+without a verified custom domain, Resend's shared `onboarding@resend.dev`
+sender 403s (silently, from this app's side - `_send_email` in `auth.py`
+logs and swallows it, the same as any other delivery failure) on any
+other recipient. Confirmed against real production sends, not assumed -
+see [`resend.com`'s own writeup](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain).
+Verifying a domain on Resend is the fix; until then, every other piece of
+this flow (token generation, expiry, single-use, the whole gate this
+email exists to protect) is real and independently verified, only actual
+inbox delivery to anyone but the account owner is not. A GitHub-OAuth-only
+account (never had a real, user-chosen password) is
 refused a reset token rather than letting an unauthenticated email link
 bootstrap password auth onto it - the page tells the visitor to continue
 with GitHub instead, and points at Settings for adding a password once
@@ -425,12 +435,15 @@ project's own code or in actually deploying it:
   need a schema per client, not one shared `examples/schema.yaml`.
 - No webhook retry logic - a failed delivery is logged, not automatically
   retried.
-- No email verification - fastapi-users supports it, but this project
-  doesn't send that email yet. Password-reset **is** implemented (see
-  [Frontend](#frontend)): a GitHub-OAuth-only account is deliberately
-  refused a reset token though - see `UserManager.forgot_password()` in
-  `auth.py` - since there's no real password on that account to reset,
-  only Settings (while signed in) can add one.
+- **Email delivery only reaches the Resend account's own address** - both
+  forgot-password and email-verification are fully implemented (see
+  [Frontend](#frontend)) and independently verified end-to-end, but real
+  inbox delivery to anyone else 403s at Resend until a custom domain is
+  verified there (no code change needed, just a DNS record). A
+  GitHub-OAuth-only account is deliberately refused a password-reset
+  token - see `UserManager.forgot_password()` in `auth.py` - since there's
+  no real password on that account to reset, only Settings (while signed
+  in) can add one.
 - No roles beyond "engineer" - every authenticated user has the same
   permissions on their own records; there's no admin/read-only distinction.
 - **Single uvicorn worker, single Railway instance, single Postgres
