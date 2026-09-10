@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import * as api from "../api/client";
 import { ApiError } from "../api/client";
 import type { ClientRecord, WebhookDelivery } from "../api/types";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 
 export function RecordDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -11,6 +12,7 @@ export function RecordDetailPage() {
   const [webhooks, setWebhooks] = useState<WebhookDelivery[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -32,7 +34,8 @@ export function RecordDetailPage() {
   }, [id]);
 
   async function handleDelete() {
-    if (!id || !confirm("Delete this record permanently? This cannot be undone.")) return;
+    if (!id) return;
+    setConfirmingDelete(false);
     try {
       await api.deleteRecord(id);
       navigate("/");
@@ -56,8 +59,8 @@ export function RecordDetailPage() {
           {record.full_name ?? "Unnamed record"}
         </h1>
         <button
-          onClick={handleDelete}
-          className="rounded-md border border-red-300 dark:border-red-900 text-red-600 dark:text-red-400 px-3 py-1.5 text-sm hover:bg-red-50 dark:hover:bg-red-950/30 transition"
+          onClick={() => setConfirmingDelete(true)}
+          className="rounded-md border border-red-300 dark:border-red-900 bg-card text-red-600 dark:text-red-400 px-3 py-1.5 text-sm shadow-sm hover:shadow hover:bg-red-50 dark:hover:bg-red-950/30 transition"
         >
           Delete
         </button>
@@ -126,6 +129,14 @@ export function RecordDetailPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        title="Delete this record?"
+        message="This permanently deletes the record and its webhook delivery history. This cannot be undone."
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </div>
   );
 }
