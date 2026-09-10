@@ -7,6 +7,37 @@ nothing has been tagged as a release yet, so everything below is under
 ## [Unreleased]
 
 ### Added
+- **Frontend test coverage and CI.** The frontend previously had zero
+  automated tests and wasn't checked by CI at all - `ci.yml`'s single
+  job only ran the backend's `ruff`/`pytest`. Now a `frontend` job
+  (Node 20, `npm install`/`lint`/`test`/`build`) runs alongside it,
+  and `npm run test` (Vitest + React Testing Library, `jsdom`) covers
+  `src/lib/`'s pure functions and one representative component:
+  - `passwordRules.test.ts` - each of the 5 rules independently, mirrors
+    the backend's real `validate_password` policy.
+  - `greeting.test.ts` - the first-name/email fallback.
+  - `phone.test.ts` - a real regression case from the actual country-code
+    dataset: `+1` (US/Canada) is a literal string prefix of `+1242`
+    (Bahamas), and `parsePhone()`'s trailing-space boundary check is
+    what keeps `"+1242 5551234"` from being mis-parsed as dial code
+    `+1`, number `"242 5551234"`.
+  - `ConfirmDialog.test.tsx` - a real rendered-DOM test (not a snapshot):
+    open/closed, both buttons' callbacks, and that clicking the backdrop
+    dismisses it while clicking the dialog body itself does not.
+  The data-fetching pages (`RecordsPage`, `RecordDetailPage`, the auth
+  forms) aren't covered yet - see
+  [What it doesn't do (yet)](../README.md#what-it-doesnt-do-yet).
+
+  **Known limitation, stated plainly:** `package-lock.json` wasn't
+  regenerated against a real `npm install` for this change - this dev
+  environment has no Node.js/npm available, only Bun (`bun install`
+  resolves the same `package.json` correctly and was used for all local
+  verification here; it writes its own `bun.lock`, gitignored, not
+  committed as a second source of truth alongside npm's lockfile). CI's
+  new frontend job therefore uses `npm install`, not `npm ci` (which
+  requires a byte-exact lockfile match and would fail against a
+  not-yet-regenerated one) - switching back to `ci` is worth doing once
+  the lockfile has gone through one real `npm install`.
 - **Webhook delivery retries.** `notify_new_record()` used to make a
   single best-effort POST - a receiver's brief outage (a deploy, a cold
   start, a transient 5xx) meant the notification was simply lost, logged

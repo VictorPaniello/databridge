@@ -3,3 +3,11 @@ dist
 .env.local
 .env.*.local
 *.local
+
+# This project's real toolchain is npm (package-lock.json is the
+# committed lockfile) - bun is only used locally in dev environments
+# without a real Node.js/npm install available, to verify the same
+# package.json resolves and the same scripts run. Its own lockfile format
+# is bun-specific and shouldn't coexist as a second source of truth.
+bun.lock
+bun.lockb

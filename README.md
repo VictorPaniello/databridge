@@ -243,6 +243,24 @@ cp .env.example .env.local   # set VITE_API_URL to this API's URL
 npm run dev
 ```
 
+```bash
+npm run lint    # eslint
+npm run test    # vitest - unit tests for lib/ (password rules, phone
+                # parsing, the greeting fallback) and a real rendered-DOM
+                # test for ConfirmDialog (React Testing Library)
+npm run build   # tsc && vite build
+```
+
+All three now run in CI too, alongside the backend's pytest job - the
+frontend previously had no automated coverage or CI check of its own at
+all (build/lint were things a developer had to remember to run locally).
+`npm run test` covers pure logic (`src/lib/`) and one representative
+component (`ConfirmDialog`, chosen because it's small, has real branching
+behavior - backdrop vs. dialog-body clicks - and every other page depends
+on it for destructive actions); the bigger data-fetching pages
+(`RecordsPage`, `RecordDetailPage`) aren't covered yet - see [What it
+doesn't do (yet)](#what-it-doesnt-do-yet).
+
 Two things on the API side exist specifically to support this - both
 covered above and in [Bugs found while building
 this](#bugs-found-while-building-this): CORS (`FRONTEND_URL`), and GitHub
@@ -460,6 +478,14 @@ project's own code or in actually deploying it:
   added without also moving the limiter to shared storage (e.g. Redis);
   each instance would then enforce its own separate 5/minute instead of
   one shared limit.
+- **Frontend test coverage is partial.** `npm run test` covers pure logic
+  (`src/lib/`) and one representative component (`ConfirmDialog`) - the
+  pages that actually fetch and render data (`RecordsPage`,
+  `RecordDetailPage`, the auth forms) have no automated tests yet, only
+  manual browser verification against the real deployed API. Better than
+  the zero frontend coverage (and no frontend CI at all) this project had
+  before, not yet equivalent to the backend's 57 pytest tests against a
+  real database.
 
 ## Security
 
