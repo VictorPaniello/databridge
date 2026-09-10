@@ -239,9 +239,6 @@ project's own code or in actually deploying it:
   loses their password currently has no self-service way back in.
 - No roles beyond "engineer" - every authenticated user has the same
   permissions on their own records; there's no admin/read-only distinction.
-- No minimum password strength - `UserManager` doesn't override
-  fastapi-users' `validate_password`, so a one-character password is
-  currently accepted at registration.
 
 ## Security
 
@@ -269,12 +266,18 @@ Found via a deliberate review, not a user report:
   against the real Docker image that one IP hitting the limit doesn't
   throttle another, which it would if the key still resolved to
   Railway's own proxy IP for everyone.
+- **No password strength requirement** - a one-character password was
+  accepted at registration. Fixed: `UserManager.validate_password`
+  (`auth.py`) now requires at least 8 characters, one uppercase letter,
+  one lowercase letter, one digit, and one special character - the
+  documented fastapi-users extension point for this, not a bespoke
+  validator bolted on elsewhere. Verified with real registration calls
+  for each individual missing requirement (too short, no uppercase, no
+  lowercase, no digit, no special character) and one that satisfies all
+  of them.
 - Also checked and ruled out as **not** a hole: `PATCH /users/me` cannot
   be used to self-promote to `is_superuser` - fastapi-users' safe-update
   default already strips that field, confirmed by actually trying it.
-
-Still open (real, lower severity, not yet fixed): no minimum password
-strength (see above).
 
 ## License
 
