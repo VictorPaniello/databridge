@@ -12,6 +12,15 @@ from sqlalchemy.orm import Session
 # but tests' create_all() (see conftest.py) needs every table module
 # imported somewhere in this chain to know about them.
 import databridge.auth_models  # noqa: F401
+from databridge.auth import (
+    UserCreate,
+    UserRead,
+    UserUpdate,
+    auth_backend,
+    fastapi_users,
+    get_github_oauth_client,
+)
+from databridge.config import settings
 from databridge.db import get_db
 from databridge.ingest import ingest_file, load_schema
 from databridge.models import ClientRecord, WebhookDelivery
@@ -24,6 +33,30 @@ from databridge.schemas import ClientRecordOut, IngestResult, WebhookDeliveryOut
 # tables, never altered existing ones - real bugs found once a column
 # needed adding to an already-deployed table (see CHANGELOG).
 app = FastAPI(title="databridge")
+
+app.include_router(fastapi_users.get_auth_router(auth_backend), prefix="/auth/jwt", tags=["auth"])
+app.include_router(
+    fastapi_users.get_register_router(UserRead, UserCreate), prefix="/auth", tags=["auth"]
+)
+app.include_router(
+    fastapi_users.get_users_router(UserRead, UserUpdate), prefix="/users", tags=["users"]
+)
+
+_github_oauth_client = get_github_oauth_client()
+if _github_oauth_client is not None:
+    app.include_router(
+        fastapi_users.get_oauth_router(
+            _github_oauth_client,
+            auth_backend,
+            settings.jwt_secret,
+            # A user who registered with email+password and later signs in
+            # with GitHub using the same email gets linked to that same
+            # account instead of silently creating a second one.
+            associate_by_email=True,
+        ),
+        prefix="/auth/github",
+        tags=["auth"],
+    )
 
 
 @app.get("/health")
