@@ -11,7 +11,7 @@ import uuid
 
 from fastapi_users.db import SQLAlchemyBaseOAuthAccountTableUUID, SQLAlchemyBaseUserTableUUID
 from fastapi_users_db_sqlalchemy.generics import GUID
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from databridge.db import Base
@@ -36,5 +36,15 @@ class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
 
 class User(SQLAlchemyBaseUserTableUUID, Base):
     __tablename__ = "users"
+
+    # Nullable at the DB level even though registration requires
+    # first_name/last_name going forward (see auth.py's UserCreate) -
+    # existing users (registered before this field existed, including via
+    # GitHub OAuth, which bypasses UserCreate entirely and never populates
+    # these) have NULL here. The frontend falls back to showing the email
+    # when first_name is unset rather than assuming every user has one.
+    first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship("OAuthAccount", lazy="joined")

@@ -20,6 +20,7 @@ from fastapi_users.authentication.transport.base import (
 from fastapi_users.db import SQLAlchemyUserDatabase
 from fastapi_users.schemas import BaseUser, BaseUserCreate, BaseUserUpdate
 from httpx_oauth.clients.github import GitHubOAuth2
+from pydantic import Field
 
 from databridge.auth_db import get_user_db
 from databridge.auth_models import User
@@ -29,15 +30,29 @@ MIN_PASSWORD_LENGTH = 8
 
 
 class UserRead(BaseUser[uuid.UUID]):
-    pass
+    # None for any user who never went through UserCreate below - notably
+    # every GitHub OAuth signup, since fastapi-users' oauth_callback
+    # creates the user directly and never touches UserCreate/validate_
+    # password's sibling validation. The frontend's greeting falls back to
+    # the email in that case rather than assuming this is always set.
+    first_name: str | None = None
+    last_name: str | None = None
+    phone: str | None = None
 
 
 class UserCreate(BaseUserCreate):
-    pass
+    # Required for email+password registration (this drives the frontend's
+    # "Hola, {first_name}{last_name[0]}" greeting) - phone stays optional,
+    # nothing in this project actually needs it yet.
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    phone: str | None = Field(default=None, max_length=30)
 
 
 class UserUpdate(BaseUserUpdate):
-    pass
+    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    last_name: str | None = Field(default=None, min_length=1, max_length=100)
+    phone: str | None = Field(default=None, max_length=30)
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
