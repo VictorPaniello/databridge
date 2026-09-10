@@ -57,6 +57,22 @@ nothing has been tagged as a release yet, so everything below is under
   returned → that token authenticated against `/users/me`.
 
 ### Fixed (deployment, continued)
+- `GET /records` returned 500 (`psycopg.errors.UndefinedColumn: column
+  client_records.owner_id does not exist`) against the live Railway
+  database. Root cause: the earlier `alembic stamp head` fix (see below)
+  assumed the live schema matched the baseline migration exactly, but
+  `client_records` had been created by `create_all()` *before*
+  `owner_id` was added to the model - `create_all()` never alters an
+  existing table, so that column was never actually added to
+  production, even though `alembic_version` claimed the schema was
+  fully up to date. Fixed with a real incremental migration
+  (`add_owner_id_to_client_records`) rather than another stamp. Verified
+  by reproducing the exact production state locally first (apply the
+  baseline migration, then manually drop `owner_id` to match what
+  production actually had) and confirming the new migration - and the
+  full test suite - both succeed against that reproduction before
+  trusting it for the real database.
+
 - GitHub OAuth's callback URL never matched. Railway terminates TLS at
   its own edge and forwards plain HTTP to the container with the real
   scheme in `X-Forwarded-Proto`; uvicorn ignores that header by default,
