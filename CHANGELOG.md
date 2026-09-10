@@ -6,7 +6,28 @@ nothing has been tagged as a release yet, so everything below is under
 
 ## [Unreleased]
 
+### Added
+- Frontend: real brand colors (emerald/stone, from Tailwind's own
+  palette) replacing the placeholder blue/slate scheme, applied as CSS
+  variables so the favicon and every page share one source of truth,
+  plus a manual light/dark toggle (localStorage-persisted, with a
+  blocking script to avoid a theme-flash on load) instead of relying
+  on `prefers-color-scheme` alone.
+- Frontend: registration's phone field split into a country-code picker
+  (ITU calling codes) + number, joined into one string before being
+  sent to the API - no backend schema change needed.
+- Frontend: GitHub OAuth signups (email only - that flow bypasses
+  `/auth/register`'s required first_name/last_name entirely) are now
+  forced through a `/complete-profile` step before anything else in
+  the app is reachable, via `ProtectedRoute`.
+
 ### Fixed
+- **The country-code `<select>`'s option list was barely readable in
+  dark mode** - `color-scheme: dark` alone wasn't enough to make the
+  native dropdown popup follow the app's theme. Fixed with an explicit
+  `background-color`/`color` on each `<option>`, not just the closed
+  `<select>`. Found by the user testing the actual dropdown, not by
+  anything a screenshot of the closed control would have caught.
 - **`POST /records/upload` blocked the whole process on every request, not
   just the uploader's.** It's `async def` (needed for `await file.read()`),
   but called `ingest_file()` - CSV parsing, several synchronous DB

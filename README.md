@@ -179,9 +179,23 @@ is pulled from its GitHub repo, not from PyPI.
 ## Frontend
 
 A React + TypeScript SPA in `frontend/` (Vite + Tailwind) - the whole API
-surface: email+password and GitHub OAuth login, registration, upload, a
+surface: email+password and GitHub OAuth login, registration (first/last
+name required, phone optional with a country-code picker), upload, a
 filterable records list, a record detail view with its webhook delivery
 history, and delete.
+
+**GitHub OAuth signups must complete their profile before anything else
+is usable.** That flow bypasses `/auth/register` entirely (fastapi-users
+creates the user directly), so a GitHub signup only ever has an email -
+`ProtectedRoute` redirects to `/complete-profile` for every guarded route
+until `first_name` is set (`PATCH /users/me`).
+
+Colors: emerald (brand/primary) + stone (neutral), both straight from
+Tailwind's own palette - not arbitrary hex - applied as CSS variables so
+every page and the favicon share one source of truth. A manual light/dark
+toggle (persisted to `localStorage`, with a blocking script in
+`index.html` to avoid a flash of the wrong theme on load) replaced relying
+on `prefers-color-scheme` alone.
 
 ```bash
 cd frontend
