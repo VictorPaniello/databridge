@@ -69,7 +69,7 @@ export function RecordsPage() {
 
   return (
     <div>
-      {user && <p className="text-sm text-muted-foreground mb-1">{greeting(user)}</p>}
+      {user && <p className="text-lg text-muted-foreground mb-1">{greeting(user)}</p>}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Client records</h1>
         <div>
