@@ -31,6 +31,10 @@ export function OAuthCallbackPage() {
     // browser history or be visible if the URL is shared.
     window.history.replaceState(null, "", window.location.pathname);
 
+    // Navigates to "/" unconditionally - ProtectedRoute itself redirects
+    // on to /complete-profile if the now-loaded user turns out to have no
+    // first_name (every GitHub OAuth signup), so this doesn't need to
+    // know or care which case it is.
     loginWithToken(token)
       .then(() => navigate("/", { replace: true }))
       .catch(() => setError("Couldn't complete sign-in. Try again."));
@@ -41,7 +45,7 @@ export function OAuthCallbackPage() {
       {error ? (
         <p className="text-red-500 text-sm">{error}</p>
       ) : (
-        <p className="text-slate-500 text-sm">Signing you in…</p>
+        <p className="text-muted-foreground text-sm">Signing you in…</p>
       )}
     </div>
   );

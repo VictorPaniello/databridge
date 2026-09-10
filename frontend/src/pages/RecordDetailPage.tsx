@@ -41,13 +41,13 @@ export function RecordDetailPage() {
     }
   }
 
-  if (loading) return <p className="text-slate-500 text-sm">Loading…</p>;
+  if (loading) return <p className="text-muted-foreground text-sm">Loading…</p>;
   if (error) return <p className="text-red-500 text-sm">{error}</p>;
   if (!record) return null;
 
   return (
     <div>
-      <Link to="/" className="text-sm text-sky-500 hover:underline">
+      <Link to="/" className="text-sm text-ring hover:underline">
         ← Back to records
       </Link>
 
@@ -88,13 +88,13 @@ export function RecordDetailPage() {
       <div className="mt-8">
         <h2 className="text-sm font-semibold mb-2">Webhook deliveries</h2>
         {webhooks.length === 0 ? (
-          <p className="text-slate-500 text-sm">
+          <p className="text-muted-foreground text-sm">
             No webhook was configured, or none has been attempted for this record.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
+          <div className="overflow-x-auto rounded-md border border-border">
             <table className="w-full text-sm">
-              <thead className="bg-slate-100 dark:bg-slate-900 text-left text-slate-500">
+              <thead className="bg-secondary text-left text-muted-foreground">
                 <tr>
                   <th className="px-4 py-2 font-medium">Attempted</th>
                   <th className="px-4 py-2 font-medium">URL</th>
@@ -104,15 +104,15 @@ export function RecordDetailPage() {
               </thead>
               <tbody>
                 {webhooks.map((w) => (
-                  <tr key={w.id} className="border-t border-slate-200 dark:border-slate-800">
-                    <td className="px-4 py-2 text-slate-500">
+                  <tr key={w.id} className="border-t border-border">
+                    <td className="px-4 py-2 text-muted-foreground">
                       {new Date(w.attempted_at).toLocaleString()}
                     </td>
-                    <td className="px-4 py-2 text-slate-500 truncate max-w-xs">{w.url}</td>
+                    <td className="px-4 py-2 text-muted-foreground truncate max-w-xs">{w.url}</td>
                     <td className="px-4 py-2">{w.status_code ?? "—"}</td>
                     <td className="px-4 py-2">
                       {w.success ? (
-                        <span className="text-emerald-500">Delivered</span>
+                        <span className="text-primary">Delivered</span>
                       ) : (
                         <span className="text-red-500" title={w.error ?? undefined}>
                           Failed
@@ -133,7 +133,7 @@ export function RecordDetailPage() {
 function Field({ label, value }: { label: string; value: string | null }) {
   return (
     <div>
-      <dt className="text-slate-500">{label}</dt>
+      <dt className="text-muted-foreground">{label}</dt>
       <dd className="font-medium">{value ?? "—"}</dd>
     </div>
   );

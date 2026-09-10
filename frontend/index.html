@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>databridge</title>
+    <script>
+      // Blocking, runs before first paint - avoids a flash of the wrong
+      // theme that a React effect (which only runs after mount) couldn't
+      // prevent. Same localStorage key ThemeToggle.tsx reads/writes.
+      (function () {
+        var stored = localStorage.getItem("theme");
+        var dark = stored ? stored === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.classList.toggle("dark", dark);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

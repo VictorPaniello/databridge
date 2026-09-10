@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { githubAuthorizeUrl, ApiError } from "../api/client";
+import { ThemeToggle } from "../components/ThemeToggle";
 
 export function LoginPage() {
   const { loginWithPassword } = useAuth();
@@ -27,71 +28,76 @@ export function LoginPage() {
   }
 
   return (
-    <div className="mx-auto max-w-sm mt-16">
-      <h1 className="text-2xl font-semibold tracking-tight mb-1">Sign in</h1>
-      <p className="text-slate-500 mb-8 text-sm">Access your ingested client records.</p>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="email">
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-md border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-sky-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="password">
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-md border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-sky-500"
-          />
-        </div>
-
-        {error && <p className="text-sm text-red-500">{error}</p>}
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded-md bg-sky-500 text-white py-2 font-medium hover:bg-sky-600 transition disabled:opacity-50"
-        >
-          {submitting ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
-
-      <div className="my-6 flex items-center gap-3 text-xs text-slate-400">
-        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
-        or
-        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
+    <div className="min-h-screen">
+      <div className="flex justify-end p-4">
+        <ThemeToggle />
       </div>
+      <div className="mx-auto max-w-sm mt-8">
+        <h1 className="text-2xl font-semibold tracking-tight mb-1">Sign in</h1>
+        <p className="text-muted-foreground mb-8 text-sm">Access your ingested client records.</p>
 
-      <a
-        href={githubAuthorizeUrl()}
-        className="w-full rounded-md border border-slate-300 dark:border-slate-700 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center justify-center gap-2"
-      >
-        <GitHubIcon />
-        Continue with GitHub
-      </a>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1" htmlFor="email">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1" htmlFor="password">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
 
-      <p className="mt-8 text-center text-sm text-slate-500">
-        No account?{" "}
-        <Link to="/register" className="text-sky-500 hover:underline">
-          Register
-        </Link>
-      </p>
+          {error && <p className="text-sm text-red-500">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full rounded-md bg-primary text-primary-foreground py-2 font-medium hover:opacity-90 transition disabled:opacity-50"
+          >
+            {submitting ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+
+        <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
+          <div className="h-px flex-1 bg-border" />
+          or
+          <div className="h-px flex-1 bg-border" />
+        </div>
+
+        <a
+          href={githubAuthorizeUrl()}
+          className="w-full rounded-md border border-input py-2 font-medium hover:bg-secondary transition flex items-center justify-center gap-2"
+        >
+          <GitHubIcon />
+          Continue with GitHub
+        </a>
+
+        <p className="mt-8 text-center text-sm text-muted-foreground">
+          No account?{" "}
+          <Link to="/register" className="text-ring hover:underline">
+            Register
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { ThemeToggle } from "./ThemeToggle";
 
 // "Hello, {first_name}" - matches the rest of the UI's language. Falls
 // back to the email when first_name is unset (every GitHub OAuth signup,
@@ -21,22 +22,23 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="border-b border-slate-200 dark:border-slate-800">
+      <header className="border-b border-border">
         <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between">
           <Link to="/" className="font-semibold tracking-tight">
-            data<span className="text-sky-500">bridge</span>
+            data<span className="text-ring">bridge</span>
           </Link>
-          {user && (
-            <div className="flex items-center gap-4 text-sm">
-              <span className="text-slate-500">{greeting(user)}</span>
+          <div className="flex items-center gap-4 text-sm">
+            {user && <span className="text-muted-foreground">{greeting(user)}</span>}
+            <ThemeToggle />
+            {user && (
               <button
                 onClick={handleLogout}
-                className="rounded-md border border-slate-300 dark:border-slate-700 px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                className="rounded-md border border-border px-3 py-1.5 hover:bg-secondary transition"
               >
                 Log out
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </header>
       <main className="flex-1 mx-auto w-full max-w-5xl px-4 py-8">{children}</main>
