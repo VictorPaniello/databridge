@@ -51,6 +51,18 @@ nothing has been tagged as a release yet, so everything below is under
   bootstrapped onto it through an unauthenticated email link - it gets a
   distinct "signs in with GitHub only" response instead, pointing at
   Settings (see above) for adding a password while already signed in.
+- Email verification, strictly enforced: registering with email+password
+  sends a verification email (same Resend integration as forgot-password);
+  until it's clicked, the account is locked out of `/records/*` **and**
+  `PATCH /users/me` (no typo-fixing exception - `GET /users/me` is the one
+  deliberate exception, since the frontend needs it to discover
+  `is_verified: false` in the first place). GitHub OAuth signups skip this
+  entirely (`is_verified_by_default=True`). New frontend pages
+  `/verify-email-pending` (holding screen + resend) and `/verify-email`
+  (the emailed link's landing page). Existing accounts (everyone who
+  signed up before this policy existed) are grandfathered in as verified
+  by a data migration, so nobody already using the app gets locked out on
+  deploy.
 
 ### Fixed
 - **The country-code `<select>`'s option list was barely readable in
@@ -93,6 +105,17 @@ nothing has been tagged as a release yet, so everything below is under
   dev-fallback log line never appeared anywhere, checked in a real
   terminal, not assumed working. Fixed by giving the `databridge` logger
   namespace its own explicit level and handler in `main.py`.
+- **`PATCH /users/me` 403'd for every non-superuser, even a freshly
+  verified one** - dropping only the library's `PATCH /me` (needed to
+  register a stricter, verified-only replacement) left its superuser-only
+  `PATCH /{id}` as the sole remaining PATCH route in that sub-router, so
+  `PATCH /users/me` got matched as `id="me"` before the new route ever
+  ran. A superuser check failing for a normal user 403s identically to a
+  verification failure, so it looked like verification itself was broken
+  until a direct DB trace confirmed `is_verified` really was `True` by
+  then. Fixed by dropping all three `/{id}` admin routes outright (unused
+  - this app never sets a superuser), not just working around the one
+  shadowed path. Locked in with a regression test.
 
 ### Added
 - Frontend (`frontend/`): a React + TypeScript SPA - login (email+password

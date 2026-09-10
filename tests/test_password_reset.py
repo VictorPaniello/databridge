@@ -106,6 +106,11 @@ def test_forgot_password_on_oauth_only_account_sends_nothing(_fake_resend, db):
     client = TestClient(app)
     email = f"oauth-only-{uuid.uuid4()}@example.com"
     _register(client, email, "Original-Password-1!")
+    # Registration itself now sends its own verification email (see
+    # UserManager.on_after_register) into this same captured _fake_resend
+    # list - clear it so the assertion below is about forgot-password's
+    # own behavior, not conflated with that unrelated send.
+    _fake_resend.clear()
 
     user = db.query(User).filter(User.email == email).one()
     user.has_password = False

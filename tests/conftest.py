@@ -18,9 +18,11 @@ from alembic import command
 from alembic.config import Config
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import databridge.auth_models  # noqa: F401 - registers users/oauth_account on Base.metadata
+from databridge.auth_models import User
 from databridge.db import SessionLocal, engine, get_db
 from databridge.main import app, limiter
 
@@ -83,7 +85,18 @@ def _authenticated_client() -> TestClient:
     """A TestClient logged in as a fresh, real engineer - goes through the
     actual register + JWT login endpoints rather than bypassing auth, so
     every test that uses one of these also exercises the real auth path
-    production traffic goes through."""
+    production traffic goes through.
+
+    Marked verified with a direct DB write rather than the real
+    request-verify-token -> /auth/verify round trip - registering a new
+    email+password account no longer verifies it by default (see
+    UserManager.on_after_register in auth.py), and most of this suite
+    tests other things that assume a fully-usable engineer, not
+    verification itself. The real round trip (token generation, email
+    content, /auth/verify accepting/rejecting it) is exercised for real in
+    test_email_verification.py, the same way test_password_reset.py
+    covers the reset-password token lifecycle rather than every other
+    test file faking its way past it."""
     app.dependency_overrides[get_db] = _override_get_db
     test_client = TestClient(app)
 
@@ -99,6 +112,16 @@ def _authenticated_client() -> TestClient:
         },
     )
     assert register_resp.status_code == 201, register_resp.text
+
+    with SessionLocal() as session:
+        # .unique() is required here, not optional - User.oauth_accounts
+        # is lazy="joined" (auth_models.py), so a plain select(User) joins
+        # against that collection and can return duplicate rows for the
+        # same user; SQLAlchemy raises rather than silently deduping.
+        user = session.execute(select(User).where(User.email == email)).unique().scalar_one()
+        user.is_verified = True
+        session.commit()
+
     login_resp = test_client.post(
         "/auth/jwt/login", data={"username": email, "password": password}
     )

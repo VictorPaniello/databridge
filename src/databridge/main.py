@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_users import exceptions as fastapi_users_exceptions
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -21,13 +22,15 @@ from starlette.concurrency import run_in_threadpool
 import databridge.auth_models  # noqa: F401
 from databridge.auth import (
     UserCreate,
+    UserManager,
     UserRead,
     UserUpdate,
     auth_backend,
-    current_active_user,
+    current_verified_active_user,
     fastapi_users,
     forgot_password_handler,
     get_github_oauth_client,
+    get_user_manager,
     make_github_authorize_redirect,
     oauth_redirect_backend,
 )
@@ -122,9 +125,59 @@ for _route in _reset_router.routes:
         _route.endpoint = limiter.limit(_STRICT_AUTH_LIMIT)(_route.endpoint)
 app.include_router(_reset_router, prefix="/auth", tags=["auth"])
 
-app.include_router(
-    fastapi_users.get_users_router(UserRead, UserUpdate), prefix="/users", tags=["users"]
-)
+# Same strict limit again: /request-verify-token is a spam-mail surface
+# (an attacker hammering it floods a victim's inbox) the same way
+# /forgot-password is, /verify a brute-force surface against the token
+# itself the same way /reset-password is.
+_verify_router = fastapi_users.get_verify_router(UserRead)
+for _route in _verify_router.routes:
+    if _route.path in ("/request-verify-token", "/verify"):
+        _route.endpoint = limiter.limit(_STRICT_AUTH_LIMIT)(_route.endpoint)
+app.include_router(_verify_router, prefix="/auth", tags=["auth"])
+
+# fastapi-users' get_users_router() has no way to require verification on
+# PATCH /me while leaving GET /me open - both share one
+# requires_verification flag, and GET /me has to stay reachable while
+# unverified regardless (AuthContext's refreshUser() calls it on every
+# load to learn is_verified in the first place - gating it too would
+# make it impossible for the frontend to ever tell "signed in but
+# unverified" apart from "not signed in", since both would just 401/403).
+# So: keep only the library's GET /me, and register a replacement PATCH
+# /me below requiring current_verified_active_user - no exceptions, not
+# even to fix a typo'd email before it's verified.
+#
+# This app never uses the library's admin-style /{id} routes (all
+# superuser-gated; nothing here ever sets a superuser) - they're dropped
+# too, not just left unused. Found the hard way why that matters: dropping
+# only "/me" PATCH and leaving "/{id}" PATCH registered meant PATCH
+# /users/me got silently caught by "/{id}" with id="me" instead of ever
+# reaching the new route below, since it was the only remaining PATCH
+# route in this sub-router - a superuser check that fails for literally
+# everyone, worded identically to a verification failure (both a bare 403
+# Forbidden), so it looked at first like verification itself was broken.
+_users_router = fastapi_users.get_users_router(UserRead, UserUpdate)
+_users_router.routes = [
+    _route for _route in _users_router.routes if _route.path == "/me" and "GET" in _route.methods
+]
+app.include_router(_users_router, prefix="/users", tags=["users"])
+
+
+@app.patch("/users/me", response_model=UserRead)
+async def patch_me(
+    user_update: UserUpdate,
+    request: Request,
+    user: User = Depends(current_verified_active_user),
+    user_manager: UserManager = Depends(get_user_manager),
+) -> User:
+    try:
+        return await user_manager.update(user_update, user, safe=True, request=request)
+    except fastapi_users_exceptions.InvalidPasswordException as e:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "UPDATE_USER_INVALID_PASSWORD", "reason": e.reason},
+        ) from e
+    except fastapi_users_exceptions.UserAlreadyExists as e:
+        raise HTTPException(status_code=400, detail="UPDATE_USER_EMAIL_ALREADY_EXISTS") from e
 
 _github_oauth_client = get_github_oauth_client()
 if _github_oauth_client is not None:
@@ -141,6 +194,15 @@ if _github_oauth_client is not None:
         # with GitHub using the same email gets linked to that same
         # account instead of silently creating a second one.
         associate_by_email=True,
+        # GitHub already confirmed this email address on its end (and the
+        # user had to actually be signed into that GitHub account to get
+        # here) - no reason to make them click a second verification
+        # email databridge would send. UserManager.on_after_register
+        # (auth.py) still calls request_verify() unconditionally for
+        # every new signup, GitHub included; it's this flag that makes
+        # that a no-op here by making is_verified already True when it's
+        # called.
+        is_verified_by_default=True,
     )
     # /authorize's own default response is JSON (meant to be fetch()'d by
     # a SPA), which breaks the CSRF cookie it sets under third-party-
@@ -185,7 +247,7 @@ async def _read_upload_within_limit(file: UploadFile) -> bytes:
 async def upload_records(
     file: UploadFile,
     db: Session = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_verified_active_user),
 ) -> IngestResult:
     content = await _read_upload_within_limit(file)
     schema = load_schema()
@@ -215,7 +277,7 @@ async def upload_records(
 def list_records(
     has_issues: bool | None = None,
     db: Session = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_verified_active_user),
 ) -> list:
     query = (
         select(ClientRecord)
@@ -240,7 +302,7 @@ def _get_owned_record(db: Session, record_id: uuid.UUID, user: User) -> ClientRe
 def get_record(
     record_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_verified_active_user),
 ) -> ClientRecord:
     return _get_owned_record(db, record_id, user)
 
@@ -249,7 +311,7 @@ def get_record(
 def get_record_webhooks(
     record_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_verified_active_user),
 ) -> list:
     _get_owned_record(db, record_id, user)
     query = select(WebhookDelivery).where(WebhookDelivery.record_id == record_id)
@@ -260,7 +322,7 @@ def get_record_webhooks(
 def delete_record(
     record_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_verified_active_user),
 ) -> None:
     """Real deletion, not a soft-delete flag - the GDPR right-to-erasure
     case this exists for means the data actually has to stop existing, not

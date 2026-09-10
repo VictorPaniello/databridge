@@ -14,6 +14,13 @@ interface AuthState {
   // /complete-profile: nothing else in the app should be reachable until
   // this is false.
   needsProfile: boolean;
+  // True once `user` is loaded, has a complete profile, and is_verified
+  // is still false - drives ProtectedRoute's redirect to
+  // /verify-email-pending. Never true for a GitHub OAuth signup (that
+  // router registers with is_verified_by_default=True - see main.py) -
+  // only an email+password registration that hasn't clicked its emailed
+  // link yet.
+  needsVerification: boolean;
   loginWithPassword: (email: string, password: string) => Promise<void>;
   loginWithToken: (token: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
@@ -21,6 +28,11 @@ interface AuthState {
   // and SettingsPage (editing an already-complete profile) - same
   // PATCH /users/me underneath either way.
   updateProfile: (input: ProfileUpdate) => Promise<void>;
+  // Re-fetches /users/me and updates `user` in place - exposed for
+  // VerifyEmailPage to call right after a successful POST /auth/verify,
+  // so the rest of the app (ProtectedRoute included) immediately sees
+  // is_verified: true instead of waiting for the next natural reload.
+  refreshUser: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -83,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const needsProfile = user !== null && !user.first_name;
+  const needsVerification = user !== null && !needsProfile && !user.is_verified;
 
   return (
     <AuthContext.Provider
@@ -90,10 +103,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         loading,
         needsProfile,
+        needsVerification,
         loginWithPassword,
         loginWithToken,
         register,
         updateProfile,
+        refreshUser,
         logout,
       }}
     >

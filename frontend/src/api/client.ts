@@ -174,6 +174,30 @@ export async function getCurrentUser(): Promise<CurrentUser> {
   return request<CurrentUser>("/users/me");
 }
 
+// Always resolves 202 - fastapi-users' own route swallows "no such user",
+// "inactive", and "already verified" identically (no re-send needed once
+// verified). Used by VerifyEmailPendingPage's "Resend email" button.
+export async function requestVerifyToken(email: string): Promise<void> {
+  await request<void>("/auth/request-verify-token", {
+    method: "POST",
+    auth: false,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+}
+
+// Throws ApiError on an invalid/expired token (VERIFY_USER_BAD_TOKEN) or
+// one for an already-verified account (VERIFY_USER_ALREADY_VERIFIED).
+// Returns the updated user (is_verified: true) on success.
+export async function verifyEmail(token: string): Promise<CurrentUser> {
+  return request<CurrentUser>("/auth/verify", {
+    method: "POST",
+    auth: false,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+}
+
 export interface ProfileUpdate {
   firstName: string;
   lastName: string;
