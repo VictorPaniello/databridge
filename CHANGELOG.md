@@ -26,13 +26,24 @@ nothing has been tagged as a release yet, so everything below is under
   assumed to work from the source alone) and GitHub Actions CI with a
   Postgres service container
 
-### Added (in progress)
+### Added
 - Per-engineer authentication and authorization: each engineer signs in
   (email+password or GitHub OAuth) and only sees their own client records.
   Built on [fastapi-users](https://fastapi-users.github.io/fastapi-users/)
   (password hashing, JWT, OAuth) rather than hand-rolled auth.
+- `POST /auth/register`, `POST /auth/jwt/login`, `POST /auth/jwt/logout`,
+  `GET /auth/github/authorize` + `/auth/github/callback` (only registered
+  when `GITHUB_CLIENT_ID`/`SECRET` are set), `GET`/`PATCH /users/me`
 - `User` and `OAuthAccount` tables (`auth_models.py`); `ClientRecord` gained
-  a nullable `owner_id` foreign key to `User`.
+  a nullable `owner_id` foreign key to `User`. `associate_by_email=True` on
+  the GitHub OAuth router links a password account and a GitHub sign-in
+  sharing the same email into one account instead of creating a duplicate.
+- `/records/upload`, `/records`, `/records/{id}`, `/records/{id}/webhooks`
+  now all require a bearer token and are scoped to the calling engineer's
+  own `owner_id` - a record belonging to someone else 404s rather than
+  403s, so its existence isn't observable either. Covered by new tests:
+  an unauthenticated upload is rejected, and two engineers uploading the
+  same file each only ever see their own records.
 - A second, async SQLAlchemy engine (`auth_db.py`) used only by the auth
   subsystem - fastapi-users requires an async session; the rest of the
   service stays on the existing synchronous engine rather than a full
@@ -40,6 +51,10 @@ nothing has been tagged as a release yet, so everything below is under
 - [Alembic](https://alembic.sqlalchemy.org/) migrations, replacing
   `Base.metadata.create_all()` for schema management (see "Fixed" below
   for why).
+- GitHub OAuth verified end-to-end against the live Railway deployment
+  with a real GitHub account, not just unit tests: `/authorize` → GitHub's
+  consent screen → `/callback` → a real user created and a bearer token
+  returned → that token authenticated against `/users/me`.
 
 ### Fixed (deployment, continued)
 - GitHub OAuth's callback URL never matched. Railway terminates TLS at

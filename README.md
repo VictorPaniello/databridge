@@ -19,23 +19,55 @@ connect to what the client already has (a CRM, an ERP, a spreadsheet
 export), and own the integration end to end.
 
 It reuses `tidycsv` as a real dependency (`pip install`-ed from its GitHub
-repo), not by copy-pasting its logic — and finding and fixing two real bugs
-while doing that integration is part of the story, not something to hide
-(see [Bugs found while building this](#bugs-found-while-building-this)
-below).
+repo), not by copy-pasting its logic — and finding and fixing several real
+bugs along the way, in the code and in deploying it, is part of the story,
+not something to hide (see
+[Bugs found while building this](#bugs-found-while-building-this) below).
 
 ## API
+
+Every `/records*` endpoint requires a `Bearer` token (see
+[Authentication](#authentication)) and only ever returns the calling
+engineer's own client records - not because each call filters by a
+company/client parameter, but because each `ClientRecord` has an
+`owner_id`, so "my clients" is just "records where `owner_id` is me".
 
 | Method | Path | What it does |
 |---|---|---|
 | `GET` | `/health` | Liveness check |
-| `POST` | `/records/upload` | Upload a CSV/Excel file, clean + persist it, fire webhooks for new records |
-| `GET` | `/records` | List records, optionally `?has_issues=true/false` |
-| `GET` | `/records/{id}` | Fetch one record |
-| `GET` | `/records/{id}/webhooks` | Audit log of webhook delivery attempts for one record |
+| `POST` | `/auth/register` | Create an account (email + password) |
+| `POST` | `/auth/jwt/login` | Log in, get back a bearer token |
+| `GET` | `/auth/github/authorize` | Start "Sign in with GitHub" (only present if `GITHUB_CLIENT_ID`/`SECRET` are set) |
+| `GET` | `/users/me` | The logged-in engineer's own profile |
+| `POST` | `/records/upload` | Upload a CSV/Excel file, clean + persist it (tagged to the caller), fire webhooks for new records |
+| `GET` | `/records` | List **your own** records, optionally `?has_issues=true/false` |
+| `GET` | `/records/{id}` | Fetch one of **your own** records - 404 (not 403) if it belongs to someone else, or doesn't exist |
+| `GET` | `/records/{id}/webhooks` | Audit log of webhook delivery attempts for one of your own records |
 
-Re-uploading a file already ingested (matched by email, the schema's key
-column) is a no-op, not a duplicate insert or an error.
+Re-uploading a file already ingested (matched by email, scoped to the
+uploading engineer) is a no-op, not a duplicate insert or an error - two
+different engineers uploading a client with the same email are two
+separate records, not duplicates of each other.
+
+## Authentication
+
+Built on [fastapi-users](https://fastapi-users.github.io/fastapi-users/)
+rather than hand-rolled password hashing/JWT/OAuth - real production
+systems don't reinvent this. Two ways in, both landing on the same kind of
+account:
+
+- **Email + password**: `POST /auth/register`, then `POST /auth/jwt/login`
+  (form-encoded `username`/`password`) for a bearer token
+- **GitHub OAuth** (optional - only enabled when `GITHUB_CLIENT_ID`/
+  `GITHUB_CLIENT_SECRET` are set): `GET /auth/github/authorize` starts the
+  flow. An engineer who already has a password account and signs in with
+  GitHub using the *same email* gets linked to that one account instead of
+  creating a duplicate.
+
+Verified end-to-end against the live Railway deployment with a real GitHub
+account, not just unit tests: `/auth/github/authorize` → GitHub's consent
+screen → redirected back to `/auth/github/callback` → a real user created
+and a bearer token returned → that token authenticated against `/users/me`.
 
 ## Architecture
 
@@ -121,8 +153,13 @@ is pulled from its GitHub repo, not from PyPI.
 
 Deployed on [Railway](https://railway.app) — a Postgres instance and this
 service in the same project. Environment variables (`DATABASE_URL`,
-`WEBHOOK_URL`, `WEBHOOK_SECRET`) are set in Railway's dashboard, never
-committed.
+`WEBHOOK_URL`, `WEBHOOK_SECRET`, `JWT_SECRET`, `GITHUB_CLIENT_ID`,
+`GITHUB_CLIENT_SECRET`) are set in Railway's dashboard, never committed.
+
+Uvicorn runs with `--proxy-headers --forwarded-allow-ips='*'` (see the
+Dockerfile) - without it, every request looks like plain `http://` to the
+app behind Railway's TLS-terminating proxy, which broke GitHub OAuth's
+callback URL matching (see [Bugs found while building this](#bugs-found-while-building-this)).
 
 On this project, Railway's own `${{Postgres.DATABASE_URL}}` service
 reference consistently resolved to an empty string at runtime (confirmed via
@@ -135,9 +172,9 @@ Building the URL from Postgres's individual `PGUSER`/`PGPASSWORD`/`PGHOST`/
 
 ## Bugs found while building this
 
-Reused `tidycsv` here instead of rewriting its cleaning logic, and that
-reuse surfaced two real bugs - fixed at the source (in `tidycsv`, with a
-regression test) rather than worked around silently:
+Found and fixed rather than worked around silently - one in `tidycsv`
+itself (reusing it as a real dependency surfaced it), the rest in this
+project's own code or in actually deploying it:
 
 1. **`None` silently became the string `"NaN"`** in JSON responses. On
    pandas 3.x, assigning a plain Python list containing `None` into a
@@ -170,18 +207,38 @@ regression test) rather than worked around silently:
    relative to the process's working directory) instead of a `__file__`
    computation - found by actually running the built image, not by
    assuming it would work because it worked with `uvicorn --reload`.
+4. **GitHub OAuth's callback URL never matched, on the first real login
+   attempt it would have been tried.** Railway terminates TLS at its edge
+   and forwards plain HTTP to the container, with the real scheme carried
+   in `X-Forwarded-Proto` - a header uvicorn ignores unless told to trust
+   it. Every request looked like `http://...` to the app, so the OAuth
+   library generated an `http://` `redirect_uri` that didn't match the
+   `https://` URL registered on GitHub's side. Fixed with
+   `--proxy-headers --forwarded-allow-ips='*'` on uvicorn's start command -
+   verified by building the real Docker image and comparing the generated
+   `redirect_uri` with and without a simulated `X-Forwarded-Proto: https`
+   header before trusting it was fixed.
+5. **Adopting Alembic mid-project crash-looped Railway** with
+   `psycopg.errors.DuplicateTable: relation "users" already exists`. An
+   earlier deploy (before Alembic replaced `create_all()`) had already
+   built the exact same schema live, from the same models - so the
+   baseline migration's `CREATE TABLE users` collided with a table that
+   already existed. Since the live schema and what the migration would
+   create were identical, the fix was `alembic stamp head` (mark the
+   migration applied without re-running its DDL), done as a one-off
+   Dockerfile change for a single deploy and reverted immediately after.
 
 ## What it doesn't do (yet)
 
 - Single schema for the whole service - a real multi-tenant version would
   need a schema per client, not one shared `examples/schema.yaml`.
-- No Alembic migrations - tables are created with
-  `Base.metadata.create_all()` on startup, fine for this project's scope,
-  not how a larger production system should manage schema changes.
 - No webhook retry logic - a failed delivery is logged, not automatically
   retried.
-- No authentication on the API itself (the webhook *sends* a shared secret,
-  but nothing currently guards the upload/read endpoints).
+- No email verification or password-reset flow - fastapi-users supports
+  both, but this project doesn't send the emails yet, so an engineer who
+  loses their password currently has no self-service way back in.
+- No roles beyond "engineer" - every authenticated user has the same
+  permissions on their own records; there's no admin/read-only distinction.
 
 ## License
 
