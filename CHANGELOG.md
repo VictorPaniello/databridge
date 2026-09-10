@@ -42,6 +42,19 @@ nothing has been tagged as a release yet, so everything below is under
   for why).
 
 ### Fixed (deployment, continued)
+- GitHub OAuth's callback URL never matched. Railway terminates TLS at
+  its own edge and forwards plain HTTP to the container with the real
+  scheme in `X-Forwarded-Proto`; uvicorn ignores that header by default,
+  so every request looked like `http://...` to the app - the OAuth
+  library then generated a `redirect_uri` of `http://databridge-
+  production-372d.up.railway.app/auth/github/callback`, which doesn't
+  match the `https://` URL registered on GitHub's side. Fixed by adding
+  `--proxy-headers --forwarded-allow-ips='*'` to uvicorn's start command.
+  Verified by building the real Docker image and comparing the generated
+  `redirect_uri` with and without a simulated `X-Forwarded-Proto: https`
+  header - `http://127.0.0.1:8000/...` without it, the correct
+  `https://databridge-production-372d.up.railway.app/...` with it.
+
 - Railway crash-looped on `psycopg.errors.DuplicateTable: relation "users"
   already exists` the moment the Alembic baseline migration deployed. An
   earlier deploy (before Alembic replaced `create_all()`) had already

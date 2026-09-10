@@ -19,4 +19,13 @@ EXPOSE 8000
 
 # Runs pending migrations before starting the server - schema is
 # Alembic-managed (see alembic/), not created ad hoc by the app itself.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn databridge.main:app --host 0.0.0.0 --port 8000"]
+#
+# --proxy-headers + --forwarded-allow-ips='*': Railway terminates TLS at
+# its own edge and forwards plain HTTP to this container, with the real
+# scheme in the X-Forwarded-Proto header. Without these flags uvicorn
+# ignores that header and reports every request as http://, which broke
+# GitHub OAuth's callback URL matching (generated http://..., registered
+# https://... on GitHub - a mismatch GitHub would reject). '*' is safe
+# here because Railway's own proxy is the only thing that can reach this
+# container - nothing external talks to it directly.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn databridge.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]
