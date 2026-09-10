@@ -20,8 +20,52 @@ nothing has been tagged as a release yet, so everything below is under
   deterministically (which real OS thread executes `ingest_file`, not a
   timing race) - confirmed the new test fails against the pre-fix code
   and passes with it restored, before trusting it.
+- **Tests bootstrapped their schema with `Base.metadata.create_all()`,
+  not real Alembic migrations** - `create_all()` only ever creates
+  *missing* tables, so a test suite built on it structurally cannot catch
+  a migration that's wrong or misordered against what's already there.
+  That exact gap caused two real production bugs earlier in this project
+  (the `NoReferencedTableError`/`DuplicateColumn` history further down
+  this changelog) - neither would have failed CI. Switched to running
+  the real migration chain once per test session (`alembic upgrade
+  head`); CI's Postgres service container starts empty every run, so
+  this now exercises the full chain there, automatically, every run.
+  Prompted by hitting the same stale-schema problem a third time
+  locally (while adding the profile fields below) and the user asking
+  whether `create_all()` should even be able to alter existing tables.
 
 ### Added
+- Frontend (`frontend/`): a React + TypeScript SPA - login (email+password
+  and GitHub OAuth), registration, upload, a filterable records list,
+  a record detail view with its webhook delivery history, and delete.
+  Backend changes needed to support it:
+  - CORS: only `settings.frontend_url` may call the API from a browser.
+  - A custom fastapi-users `Transport` (`RedirectTransport`) so a
+    successful GitHub login redirects back into the SPA with the JWT in
+    the URL fragment, instead of returning a bare JSON body on the
+    API's own origin - built on fastapi-users' own extension point (the
+    same one `BearerTransport`/`CookieTransport` implement).
+  - GitHub's own `/auth/github/authorize` had to stop being a JSON
+    endpoint the SPA `fetch()`-ed and become a real redirect itself.
+    Found the hard way: with the SPA on a different origin than the
+    API, the CSRF cookie that route sets was being set via a
+    *cross-origin* fetch - which browsers that block third-party
+    cookies by default (Chrome included) silently drop, `credentials:
+    "include"` on the fetch notwithstanding. Every attempt 400'd with
+    `OAUTH_INVALID_STATE` until traced to this. Fixed by replacing the
+    route with one that redirects straight to GitHub (reusing
+    fastapi-users' own CSRF/state-generation functions, not
+    reimplementing them) - the browser's own top-level navigation to
+    the API's domain is what sets the cookie, first-party, same as the
+    callback navigation right after it. Verified for real: a real
+    (throwaway) FastAPI app + a real `GitHubOAuth2` client asserting
+    the redirect target, the cookie, and that the cookie's value
+    matches what's embedded in the state param.
+- Engineer profile: `first_name`/`last_name` (required at registration)
+  and `phone` (optional) on `User`. Nullable at the DB level regardless
+  - existing users, and every GitHub OAuth signup (which bypasses
+  `UserCreate` entirely), have `NULL` here. Drives the frontend's
+  greeting, which falls back to the email when unset.
 - Postgres backups: `scripts/backup_db.py` (logic in
   `src/databridge/backup.py`) runs `pg_dump -Fc` on a schedule and writes
   dumps to `BACKUP_DIR`, deleting dumps older than

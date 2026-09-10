@@ -57,13 +57,20 @@ rather than hand-rolled password hashing/JWT/OAuth - real production
 systems don't reinvent this. Two ways in, both landing on the same kind of
 account:
 
-- **Email + password**: `POST /auth/register`, then `POST /auth/jwt/login`
-  (form-encoded `username`/`password`) for a bearer token
+- **Email + password**: `POST /auth/register` (now also requires
+  `first_name`/`last_name`; `phone` is optional), then
+  `POST /auth/jwt/login` (form-encoded `username`/`password`) for a
+  bearer token in the response body
 - **GitHub OAuth** (optional - only enabled when `GITHUB_CLIENT_ID`/
-  `GITHUB_CLIENT_SECRET` are set): `GET /auth/github/authorize` starts the
-  flow. An engineer who already has a password account and signs in with
-  GitHub using the *same email* gets linked to that one account instead of
-  creating a duplicate.
+  `GITHUB_CLIENT_SECRET` are set): `GET /auth/github/authorize` redirects
+  straight to GitHub's consent screen (a real redirect, not JSON - see
+  [Bugs found while building this](#bugs-found-while-building-this) for
+  why that matters with a separately-hosted frontend). GitHub redirects
+  back to `/auth/github/callback`, which redirects again - into the
+  frontend, with the bearer token in the URL fragment (`RedirectTransport`
+  in `auth.py`). An engineer who already has a password account and signs
+  in with GitHub using the *same email* gets linked to that one account
+  instead of creating a duplicate.
 
 Verified end-to-end against the live Railway deployment with a real GitHub
 account, not just unit tests: `/auth/github/authorize` → GitHub's consent
@@ -122,12 +129,23 @@ curl -X POST http://127.0.0.1:8000/records/upload \
 
 Tests run against a **real** PostgreSQL database (`databridge_test`), not a
 mock — the whole point of this project is proving the ingest → Postgres →
-API path actually works.
+API path actually works. The schema is bootstrapped by running the real
+Alembic migration chain once per test session (`alembic upgrade head`),
+not `Base.metadata.create_all()` — `create_all()` only ever creates
+*missing* tables, so it can't catch a migration that's wrong or
+misordered relative to what's already there. That gap caused two real
+bugs earlier in this project (see [Bugs found while building
+this](#bugs-found-while-building-this)); running the actual migrations in
+CI (a fresh Postgres container every run) closes it.
 
 ```bash
 pytest
 ruff check .
 ```
+
+If `databridge_test` predates this (tables from an old `create_all()` run,
+no `alembic_version` tracking), drop and recreate it once — the same fix
+used when this project itself adopted Alembic.
 
 ## Database migrations
 
@@ -157,6 +175,33 @@ docker run -p 8000:8000 \
 
 Note: the image needs `git` (installed in the Dockerfile) because `tidycsv`
 is pulled from its GitHub repo, not from PyPI.
+
+## Frontend
+
+A React + TypeScript SPA in `frontend/` (Vite + Tailwind) - the whole API
+surface: email+password and GitHub OAuth login, registration, upload, a
+filterable records list, a record detail view with its webhook delivery
+history, and delete.
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local   # set VITE_API_URL to this API's URL
+npm run dev
+```
+
+Two things on the API side exist specifically to support this - both
+covered above and in [Bugs found while building
+this](#bugs-found-while-building-this): CORS (`FRONTEND_URL`), and GitHub
+OAuth's `/authorize` being a real redirect rather than JSON, so the CSRF
+cookie it sets isn't a cross-origin (and therefore browser-blocked)
+third-party cookie.
+
+Deployed separately from the API - Vercel, not Railway, since it's a
+static SPA rather than a long-running process. `VITE_API_URL` is set in
+Vercel's project settings for production; the API's `FRONTEND_URL` env
+var must point back at that same deployed URL for CORS and the OAuth
+redirect to work.
 
 ## Deployment
 
@@ -291,6 +336,22 @@ project's own code or in actually deploying it:
    checks which real OS thread actually executes `ingest_file`, confirmed
    to fail against the pre-fix code and pass with the fix restored, before
    trusting it (see `tests/test_concurrency.py`).
+7. **GitHub login 400'd with `OAUTH_INVALID_STATE` on every attempt, once
+   there was a real frontend on a different origin than the API.**
+   `GET /auth/github/authorize` (fastapi-users' own) returns JSON and sets
+   a CSRF cookie on that same response - meant to be `fetch()`'d by a SPA,
+   which then navigates the browser to the JSON body's `authorization_url`
+   itself. With the frontend on a different origin, that fetch is
+   cross-origin, and browsers that block third-party cookies by default
+   (Chrome included) silently drop the cookie it tried to set -
+   `credentials: "include"` on the fetch didn't change that. Traced by
+   comparing what a direct `curl` to the endpoint returned (a valid
+   `Set-Cookie`) against what the browser's DevTools actually stored
+   (nothing), not by guessing. Fixed by replacing the route with one that
+   redirects straight to GitHub instead of returning JSON - reusing
+   fastapi-users' own CSRF/state-generation functions rather than
+   reimplementing them - so the browser's own top-level navigation to the
+   API's domain is what sets the cookie, first-party.
 
 ## What it doesn't do (yet)
 
