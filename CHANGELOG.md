@@ -6,6 +6,21 @@ nothing has been tagged as a release yet, so everything below is under
 
 ## [Unreleased]
 
+### Fixed
+- **`POST /records/upload` blocked the whole process on every request, not
+  just the uploader's.** It's `async def` (needed for `await file.read()`),
+  but called `ingest_file()` - CSV parsing, several synchronous DB
+  round-trips, and a blocking `httpx.post` to the webhook receiver with up
+  to a 5s timeout - directly instead of offloading it. FastAPI only
+  auto-offloads *sync* `def` routes to a worker thread; with this
+  project's single uvicorn worker, a sync call left running directly on
+  the event loop thread blocks the entire process, not just that request.
+  Found during a deliberate scalability/reliability/availability/
+  performance review. Fixed with `run_in_threadpool`. Verified
+  deterministically (which real OS thread executes `ingest_file`, not a
+  timing race) - confirmed the new test fails against the pre-fix code
+  and passes with it restored, before trusting it.
+
 ### Added
 - Postgres backups: `scripts/backup_db.py` (logic in
   `src/databridge/backup.py`) runs `pg_dump -Fc` on a schedule and writes

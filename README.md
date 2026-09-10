@@ -276,6 +276,21 @@ project's own code or in actually deploying it:
    create were identical, the fix was `alembic stamp head` (mark the
    migration applied without re-running its DDL), done as a one-off
    Dockerfile change for a single deploy and reverted immediately after.
+6. **`POST /records/upload` blocked the whole process on every request,
+   not just the uploader's.** It's declared `async def` (needed for
+   `await file.read()`), but called `ingest_file()` - CSV parsing, several
+   synchronous DB round-trips, and a blocking `httpx.post` to the webhook
+   receiver with up to a 5s timeout - directly. FastAPI only auto-offloads
+   *sync* `def` routes to a worker thread; a sync call made directly
+   inside an async route runs on the single event loop thread instead -
+   and with this project's single uvicorn worker, that thread **is** the
+   whole process. Found during a deliberate scalability/reliability/
+   availability/performance review, not a user report. Fixed with
+   `run_in_threadpool` (the same mechanism FastAPI itself uses for sync
+   routes). Verified deterministically, not by racing timers: a test
+   checks which real OS thread actually executes `ingest_file`, confirmed
+   to fail against the pre-fix code and pass with the fix restored, before
+   trusting it (see `tests/test_concurrency.py`).
 
 ## What it doesn't do (yet)
 
@@ -288,6 +303,18 @@ project's own code or in actually deploying it:
   loses their password currently has no self-service way back in.
 - No roles beyond "engineer" - every authenticated user has the same
   permissions on their own records; there's no admin/read-only distinction.
+- **Single uvicorn worker, single Railway instance, single Postgres
+  instance** - no horizontal scaling, no redundancy. An outage of that one
+  container or that one database is full downtime; there's no failover.
+  Explicit tradeoff for a single-tenant portfolio project, not something
+  hidden - see [Backups](#backups) for the one piece of disaster recovery
+  that *does* exist (protects against DB-internal mistakes, not against
+  losing the instance or the account).
+- **Rate limiting state is in-memory** (`slowapi`'s default) - correct for
+  the single instance above, but wouldn't be if a second instance were ever
+  added without also moving the limiter to shared storage (e.g. Redis);
+  each instance would then enforce its own separate 5/minute instead of
+  one shared limit.
 
 ## Security
 
