@@ -11,6 +11,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 # Registers users/oauth_account on Base.metadata - not used directly here,
 # but tests' create_all() (see conftest.py) needs every table module
@@ -121,7 +122,19 @@ async def upload_records(
 ) -> IngestResult:
     content = await _read_upload_within_limit(file)
     schema = load_schema()
-    inserted, stats = ingest_file(db, file.filename or "upload.csv", content, schema, user.id)
+    # ingest_file does CPU-bound CSV parsing, several synchronous DB
+    # round-trips, and (via notify_new_record) a blocking httpx.post to the
+    # webhook receiver with up to a 5s timeout. This route is `async def`
+    # (needed for `await file.read()` above), and FastAPI only auto-offloads
+    # *sync* `def` routes to a worker thread - a sync call made directly
+    # inside an async route runs straight on the single event loop thread
+    # instead, stalling every other in-flight request for as long as it
+    # takes. run_in_threadpool moves it off the loop, the same mechanism
+    # FastAPI itself uses for sync routes. Found via a deliberate
+    # scalability/performance review, not a user report.
+    inserted, stats = await run_in_threadpool(
+        ingest_file, db, file.filename or "upload.csv", content, schema, user.id
+    )
     return IngestResult(
         rows_total=stats["rows_total"],
         rows_clean=len(inserted) - sum(1 for r in inserted if r.has_issues),
