@@ -34,7 +34,15 @@ class ClientRecord(Base):
     issues: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    webhook_deliveries: Mapped[list[WebhookDelivery]] = relationship(back_populates="record")
+    webhook_deliveries: Mapped[list[WebhookDelivery]] = relationship(
+        back_populates="record", passive_deletes=True
+    )
+    """passive_deletes=True: lets the database's own ON DELETE CASCADE (see
+    WebhookDelivery.record_id) do the cleanup instead of SQLAlchemy
+    SELECTing every delivery first to delete them one by one - matters for
+    DELETE /records/{id} (the GDPR erasure endpoint), where deleting a
+    client record must actually remove its delivery audit trail too, not
+    leave orphaned rows or fail on the foreign key."""
 
 
 class WebhookDelivery(Base):
@@ -46,7 +54,7 @@ class WebhookDelivery(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     record_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("client_records.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("client_records.id", ondelete="CASCADE"), nullable=False
     )
     url: Mapped[str] = mapped_column(String, nullable=False)
     status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)

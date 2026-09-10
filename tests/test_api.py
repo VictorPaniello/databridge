@@ -138,3 +138,48 @@ def test_engineer_gets_404_not_403_for_another_engineers_record(
 
     response = other_client.get(f"/records/{my_record_id}/webhooks")
     assert response.status_code == 404
+
+
+def test_delete_record_actually_removes_it(client: TestClient):
+    record_id = _upload(client).json()["records"][0]["id"]
+
+    response = client.delete(f"/records/{record_id}")
+    assert response.status_code == 204
+
+    # Really gone, not soft-deleted - the same 404 an ID that never existed
+    # would get, not a "deleted" flag still showing up somewhere.
+    assert client.get(f"/records/{record_id}").status_code == 404
+    assert record_id not in {r["id"] for r in client.get("/records").json()}
+
+
+def test_delete_record_cascades_to_its_webhook_deliveries(client: TestClient, db):
+    from sqlalchemy import select
+
+    from databridge.models import WebhookDelivery
+
+    record_id = _upload(client).json()["records"][0]["id"]
+    db.add(
+        WebhookDelivery(record_id=record_id, url="http://example.com", success=True)
+    )
+    db.commit()
+
+    response = client.delete(f"/records/{record_id}")
+    assert response.status_code == 204
+
+    remaining = db.execute(
+        select(WebhookDelivery).where(WebhookDelivery.record_id == record_id)
+    ).scalars().all()
+    assert remaining == []
+
+
+def test_engineer_cannot_delete_another_engineers_record(
+    client: TestClient, other_client: TestClient
+):
+    my_record_id = _upload(client).json()["records"][0]["id"]
+
+    response = other_client.delete(f"/records/{my_record_id}")
+    assert response.status_code == 404
+
+    # Still there - the delete attempt from someone else must not have
+    # actually removed it.
+    assert client.get(f"/records/{my_record_id}").status_code == 200

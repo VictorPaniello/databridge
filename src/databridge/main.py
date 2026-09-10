@@ -174,3 +174,20 @@ def get_record_webhooks(
     _get_owned_record(db, record_id, user)
     query = select(WebhookDelivery).where(WebhookDelivery.record_id == record_id)
     return db.execute(query).scalars().all()
+
+
+@app.delete("/records/{record_id}", status_code=204)
+def delete_record(
+    record_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_active_user),
+) -> None:
+    """Real deletion, not a soft-delete flag - the GDPR right-to-erasure
+    case this exists for means the data actually has to stop existing, not
+    just stop being shown. The FK's ON DELETE CASCADE (see models.py) takes
+    the record's webhook_deliveries audit trail with it - keeping delivery
+    logs that still carry the erased record's id around would defeat the
+    point."""
+    record = _get_owned_record(db, record_id, user)
+    db.delete(record)
+    db.commit()
