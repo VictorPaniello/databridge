@@ -42,3 +42,14 @@ nothing has been tagged as a release yet, so everything below is under
   `site-packages`, not next to `examples/`. Found by actually running the
   built Docker image rather than assuming `uvicorn --reload` behavior would
   carry over; fixed by making the schema path a configuration value.
+- Railway deployment: `DATABASE_URL` defaulted to `postgres://`/`postgresql://`
+  (no driver), which SQLAlchemy resolves to psycopg2 - not installed here
+  (this project uses psycopg3). Added a `field_validator` on
+  `Settings.database_url` that rewrites either scheme to
+  `postgresql+psycopg://`. Separately, Railway's own
+  `${{Postgres.DATABASE_URL}}` service reference resolved to an empty
+  string at runtime on this project regardless of how it was entered;
+  worked around by building the connection string from Postgres's
+  individual `PGUSER`/`PGPASSWORD`/`PGHOST`/`PGPORT`/`PGDATABASE`
+  variables instead. Found by reading the actual deployment crash logs,
+  not by assuming the dashboard configuration was correct.

@@ -106,6 +106,15 @@ service in the same project. Environment variables (`DATABASE_URL`,
 `WEBHOOK_URL`, `WEBHOOK_SECRET`) are set in Railway's dashboard, never
 committed.
 
+On this project, Railway's own `${{Postgres.DATABASE_URL}}` service
+reference consistently resolved to an empty string at runtime (confirmed via
+`sqlalchemy.exc.ArgumentError: Could not parse SQLAlchemy URL`), no matter
+how it was entered (typed, picked from the reference dropdown, or via the
+Raw Editor) - tried and ruled out as the cause before working around it.
+Building the URL from Postgres's individual `PGUSER`/`PGPASSWORD`/`PGHOST`/
+`PGPORT`/`PGDATABASE` variables instead resolved correctly:
+`postgresql+psycopg://${{Postgres.PGUSER}}:${{Postgres.PGPASSWORD}}@${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}`
+
 ## Bugs found while building this
 
 Reused `tidycsv` here instead of rewriting its cleaning logic, and that
@@ -123,7 +132,17 @@ regression test) rather than worked around silently:
    root cause in this project's own `ingest.py` (`.iterrows()` rebuilds
    each row as a fresh Series and re-triggers the same coercion - fixed by
    reading columns via `.at[]` instead).
-2. **The service crashed in Docker but not locally.** The schema file path
+2. **On Railway, `DATABASE_URL` was never a real Postgres connection
+   string.** First it was the local-dev default (`postgres:postgres@127.0.0.1`)
+   entered manually into the dashboard instead of a service reference -
+   fixed by pointing it at the Postgres service. Then Railway's own
+   `${{Postgres.DATABASE_URL}}` reference resolved to an empty string at
+   runtime regardless of how it was entered - fixed by building the
+   connection string from Postgres's individual `PGUSER`/`PGHOST`/etc.
+   variables instead (see [Deployment](#deployment)). Found by reading the
+   actual container crash logs each time rather than assuming the dashboard
+   configuration was correct because it looked right.
+3. **The service crashed in Docker but not locally.** The schema file path
    was computed relative to `__file__`'s location on disk, which works
    under an editable install (`pip install -e .`, where the source stays in
    place) but breaks the moment the package is installed normally - as it
