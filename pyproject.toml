@@ -16,6 +16,9 @@ dependencies = [
     "httpx>=0.27",
     "python-multipart>=0.0.12",
     "tidycsv @ git+https://github.com/VictorPaniello/tidycsv.git",
+    "fastapi-users[sqlalchemy]>=14.0",
+    "httpx-oauth>=0.15",
+    "alembic>=1.13",
 ]
 
 [project.optional-dependencies]
