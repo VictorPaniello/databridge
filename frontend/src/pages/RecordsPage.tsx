@@ -3,10 +3,13 @@ import { Link } from "react-router-dom";
 import * as api from "../api/client";
 import { ApiError } from "../api/client";
 import type { ClientRecord, IngestResult } from "../api/types";
+import { useAuth } from "../auth/AuthContext";
+import { greeting } from "../lib/greeting";
 
 type Filter = "all" | "clean" | "flagged";
 
 export function RecordsPage() {
+  const { user } = useAuth();
   const [records, setRecords] = useState<ClientRecord[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
   const [loading, setLoading] = useState(true);
@@ -66,6 +69,7 @@ export function RecordsPage() {
 
   return (
     <div>
+      {user && <p className="text-sm text-muted-foreground mb-1">{greeting(user)}</p>}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Client records</h1>
         <div>
