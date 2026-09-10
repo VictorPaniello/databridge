@@ -212,7 +212,12 @@ confirmed `pg_dump --version` reports 18.6 (matching Railway's server,
 confirmed via `SHOW server_version` in Railway's Console - `postgresql-
 client`'s Debian-stock version is only 15), then ran the real entrypoint
 inside a container against a real throwaway Postgres and confirmed the
-resulting dump parses with `pg_restore --list`.
+resulting dump parses with `pg_restore --list`. Then verified the actual
+deployed service too, not just the local reproduction: triggered the real
+Railway Cron Schedule service on demand ("Run now") and read its deploy
+logs, confirming it dumped the real production database to a real file on
+the real mounted Volume (`Dumping database to
+/data/backups/databridge-backup-<timestamp>.dump...` / `Dump complete`).
 
 ## Bugs found while building this
 
