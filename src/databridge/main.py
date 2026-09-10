@@ -35,8 +35,15 @@ from databridge.auth_models import User
 from databridge.config import settings
 from databridge.db import get_db
 from databridge.ingest import ingest_file, load_schema
-from databridge.models import ClientRecord, WebhookDelivery
-from databridge.schemas import ClientRecordOut, IngestResult, RecordsPage, WebhookDeliveryOut
+from databridge.models import ClientRecord, IngestionRun, WebhookDelivery
+from databridge.schemas import (
+    ClientRecordOut,
+    IngestionRunOut,
+    IngestionRunsPage,
+    IngestResult,
+    RecordsPage,
+    WebhookDeliveryOut,
+)
 from databridge.webhooks import notify_new_record
 
 # Nothing else in this process configures logging - Python's root logger
@@ -200,21 +207,62 @@ async def upload_records(
     # takes. run_in_threadpool moves it off the loop, the same mechanism
     # FastAPI itself uses for sync routes. Found via a deliberate
     # scalability/performance review, not a user report.
-    inserted, stats = await run_in_threadpool(
+    inserted, run = await run_in_threadpool(
         ingest_file, db, file.filename or "upload.csv", content, schema, user.id
     )
     return IngestResult(
-        rows_total=stats["rows_total"],
-        rows_clean=len(inserted) - sum(1 for r in inserted if r.has_issues),
-        rows_flagged=sum(1 for r in inserted if r.has_issues),
-        rows_dropped_duplicates=stats["rows_dropped_duplicates"],
+        ingestion_run_id=run.id,
+        rows_total=run.rows_total,
+        rows_clean=run.rows_clean,
+        rows_flagged=run.rows_flagged,
+        rows_dropped_duplicates=run.rows_dropped_duplicates,
+        rows_skipped_existing=run.rows_skipped_existing,
         records=[ClientRecordOut.model_validate(r) for r in inserted],
     )
+
+
+@app.get("/ingestion-runs", response_model=IngestionRunsPage)
+def list_ingestion_runs(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_active_user),
+) -> IngestionRunsPage:
+    base_query = select(IngestionRun).where(IngestionRun.owner_id == user.id)
+    total = db.execute(select(func.count()).select_from(base_query.subquery())).scalar_one()
+
+    page_query = base_query.order_by(IngestionRun.created_at.desc()).limit(limit).offset(offset)
+    runs = db.execute(page_query).scalars().all()
+
+    return IngestionRunsPage(
+        items=[IngestionRunOut.model_validate(r) for r in runs],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ingestion-runs/{run_id}", response_model=IngestionRunOut)
+def get_ingestion_run(
+    run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_active_user),
+) -> IngestionRun:
+    run = db.get(IngestionRun, run_id)
+    if run is None or run.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Ingestion run not found")
+    return run
 
 
 @app.get("/records", response_model=RecordsPage)
 def list_records(
     has_issues: bool | None = None,
+    # Lets a caller go from "this run had 3 flagged rows" (an
+    # IngestionRun) to "show me exactly those rows" - no separate
+    # ownership check needed here beyond the owner_id filter already
+    # below: passing another engineer's run_id just matches zero of
+    # *this* caller's records, never leaks anyone else's.
+    ingestion_run_id: uuid.UUID | None = None,
     # 500 is a hard ceiling regardless of what a caller asks for, not just
     # a default - previously this endpoint had no limit at all, so a
     # client with (say) 50,000 records made one query and one response
@@ -228,6 +276,8 @@ def list_records(
     base_query = select(ClientRecord).where(ClientRecord.owner_id == user.id)
     if has_issues is not None:
         base_query = base_query.where(ClientRecord.has_issues == has_issues)
+    if ingestion_run_id is not None:
+        base_query = base_query.where(ClientRecord.ingestion_run_id == ingestion_run_id)
 
     # Counted against the same filtered base_query (not a second,
     # separately-filtered one) so total always matches what has_issues

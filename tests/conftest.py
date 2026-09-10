@@ -59,7 +59,15 @@ def _migrate_schema():
 def _clean_tables():
     yield
     with engine.begin() as conn:
-        conn.exec_driver_sql("TRUNCATE webhook_deliveries, client_records, oauth_account, users")
+        # Every table here in one TRUNCATE, not one per table - Postgres
+        # refuses to truncate a table another (non-listed) table still
+        # has a live FK pointing at, so adding a new FK-holding table
+        # (ingestion_runs -> users, client_records -> ingestion_runs)
+        # without adding it here breaks every test that touches the DB,
+        # not just ones that use it directly.
+        conn.exec_driver_sql(
+            "TRUNCATE webhook_deliveries, client_records, ingestion_runs, oauth_account, users"
+        )
 
 
 @pytest.fixture

@@ -11,6 +11,7 @@ import { CompleteProfilePage } from "./pages/CompleteProfilePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { RecordsPage } from "./pages/RecordsPage";
 import { RecordDetailPage } from "./pages/RecordDetailPage";
+import { IngestionRunsPage } from "./pages/IngestionRunsPage";
 
 export default function App() {
   return (
@@ -46,6 +47,16 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <SettingsPage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/uploads"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <IngestionRunsPage />
                 </Layout>
               </ProtectedRoute>
             }

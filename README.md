@@ -39,8 +39,10 @@ company/client parameter, but because each `ClientRecord` has an
 | `POST` | `/auth/jwt/login` | Log in, get back a bearer token |
 | `GET` | `/auth/github/authorize` | Start "Sign in with GitHub" (only present if `GITHUB_CLIENT_ID`/`SECRET` are set) |
 | `GET` | `/users/me` | The logged-in engineer's own profile |
-| `POST` | `/records/upload` | Upload a CSV/Excel file, clean + persist it (tagged to the caller), fire webhooks for new records |
-| `GET` | `/records` | List **your own** records, paginated (`?limit=&offset=`, `limit` capped server-side at 500) and optionally `?has_issues=true/false`; returns `{items, total, limit, offset}` |
+| `POST` | `/records/upload` | Upload a CSV/Excel file, clean + persist it (tagged to the caller), fire webhooks for new records - returns an `ingestion_run_id` |
+| `GET` | `/ingestion-runs` | List **your own** past uploads, paginated - the persisted summary of every upload, not just the one the last `IngestResult` response reported |
+| `GET` | `/ingestion-runs/{id}` | Fetch one of **your own** past uploads - 404 (not 403) otherwise |
+| `GET` | `/records` | List **your own** records, paginated (`?limit=&offset=`, `limit` capped server-side at 500), optionally `?has_issues=true/false` and/or `?ingestion_run_id=` (drill from one upload into exactly the records it created); returns `{items, total, limit, offset}` |
 | `GET` | `/records/{id}` | Fetch one of **your own** records - 404 (not 403) if it belongs to someone else, or doesn't exist |
 | `GET` | `/records/{id}/webhooks` | Audit log of webhook delivery attempts for one of your own records |
 | `POST` | `/records/{id}/webhooks/replay` | Manually re-send the notification for one of your own records, on demand - 400 if no `WEBHOOK_URL` is configured |
@@ -87,7 +89,7 @@ CSV/Excel upload
 tidycsv (schema-driven cleaning, validation)
       │
       ▼
-PostgreSQL (client_records, webhook_deliveries)
+PostgreSQL (ingestion_runs, client_records, webhook_deliveries)
       │
       ▼
 Outbound webhook (retried with backoff on failure - a failed delivery
@@ -98,6 +100,26 @@ Outbound webhook (retried with backoff on failure - a failed delivery
 `config.py` holds every environment-dependent value (database URL, webhook
 URL/secret, schema path) - nothing is hardcoded, so the same image runs
 locally, in CI, and in production with different environment variables.
+
+**Ingestion runs**: every upload persists an `IngestionRun` row - what
+`IngestResult` reports in the moment (`rows_total`/`rows_clean`/
+`rows_flagged`/`rows_dropped_duplicates`/`rows_skipped_existing`), plus
+*when* it happened and *which file* it was, queryable later via
+`GET /ingestion-runs`/`GET /ingestion-runs/{id}` instead of only existing
+in an HTTP response that's long gone the moment nobody was looking at it.
+Every `ClientRecord` links back to the run that created it
+(`ingestion_run_id`), so `GET /records?ingestion_run_id=...` drills from
+"this run had 3 flagged rows" straight to exactly those rows - the
+frontend's Upload History page (`/uploads`) does exactly this via a "View
+records" link per run. Every row is accounted for exactly once:
+`rows_total == rows_clean + rows_flagged + rows_dropped_duplicates +
+rows_skipped_existing` always holds (a real invariant, asserted in
+`tests/test_ingestion_runs.py`) - `rows_skipped_existing` in particular
+was a genuine gap found while building this: re-uploading a file that's
+already fully ingested is a no-op (see below), but those skipped rows
+went completely unaccounted for in any counter until this field was
+added, which meant the four *other* counters silently stopped summing to
+`rows_total` on a re-upload.
 
 Each webhook delivery is signed: `X-Databridge-Signature-256` is an
 HMAC-SHA256 of the exact request body, keyed with `WEBHOOK_SECRET` - the
@@ -493,11 +515,11 @@ project's own code or in actually deploying it:
 - **Frontend test coverage is partial.** `npm run test` covers pure logic
   (`src/lib/`) and one representative component (`ConfirmDialog`) - the
   pages that actually fetch and render data (`RecordsPage`,
-  `RecordDetailPage`, the auth forms) have no automated tests yet, only
-  manual browser verification against the real deployed API. Better than
-  the zero frontend coverage (and no frontend CI at all) this project had
-  before, not yet equivalent to the backend's 57 pytest tests against a
-  real database.
+  `RecordDetailPage`, `IngestionRunsPage`, the auth forms) have no
+  automated tests yet, only manual browser verification against a real
+  local backend. Better than the zero frontend coverage (and no frontend
+  CI at all) this project had before, not yet equivalent to the
+  backend's 69 pytest tests against a real database.
 
 ## Security
 

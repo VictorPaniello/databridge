@@ -4,6 +4,9 @@
 
 export interface ClientRecord {
   id: string;
+  // Which upload created this record - null for anything ingested before
+  // ingestion_run_id existed. See IngestionRun below.
+  ingestion_run_id: string | null;
   source_file: string;
   full_name: string | null;
   email: string | null;
@@ -30,11 +33,39 @@ export interface WebhookDelivery {
 }
 
 export interface IngestResult {
+  ingestion_run_id: string;
   rows_total: number;
   rows_clean: number;
   rows_flagged: number;
   rows_dropped_duplicates: number;
+  // Rows that matched an email already ingested in a *previous* upload -
+  // re-uploading the same list is a no-op, not an error, but those rows
+  // still need to be accounted for: rows_total always equals rows_clean +
+  // rows_flagged + rows_dropped_duplicates + this field.
+  rows_skipped_existing: number;
   records: ClientRecord[];
+}
+
+// The persisted counterpart of IngestResult (GET /ingestion-runs and
+// /ingestion-runs/{id}) - what IngestResult never carried: when it
+// happened and which file it was, so a run is still findable after the
+// upload response that first reported it is long gone.
+export interface IngestionRun {
+  id: string;
+  source_file: string;
+  rows_total: number;
+  rows_clean: number;
+  rows_flagged: number;
+  rows_dropped_duplicates: number;
+  rows_skipped_existing: number;
+  created_at: string;
+}
+
+export interface IngestionRunsPage {
+  items: IngestionRun[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 // GET /records used to return a bare ClientRecord[] - every matching row

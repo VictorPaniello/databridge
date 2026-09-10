@@ -21,6 +21,11 @@ export function Layout({ children }: { children: ReactNode }) {
           </Link>
           <div className="flex items-center gap-4 text-sm">
             {user && (
+              <Link to="/uploads" className="text-muted-foreground hover:text-foreground transition">
+                Upload history
+              </Link>
+            )}
+            {user && (
               <Link
                 to="/settings"
                 aria-label="Account settings"

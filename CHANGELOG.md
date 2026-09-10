@@ -7,6 +7,54 @@ nothing has been tagged as a release yet, so everything below is under
 ## [Unreleased]
 
 ### Added
+- **Persisted ingestion runs.** Before this, the only record of what an
+  upload actually did was `IngestResult` - the HTTP response, gone the
+  moment it wasn't being looked at (a closed tab, a script that didn't
+  log it, a client asking days later "did my 50,000-row file actually
+  finish?"). A new `IngestionRun` row now persists every upload's
+  summary - `rows_total`/`rows_clean`/`rows_flagged`/
+  `rows_dropped_duplicates`/`rows_skipped_existing`, plus when it
+  happened and which file it was - queryable via `GET /ingestion-runs`
+  and `GET /ingestion-runs/{id}`. Every `ClientRecord` now links back to
+  the run that created it (`ingestion_run_id`, migration `0949c3dd5b88`
+  - nullable, like `owner_id`, since there's no way to reconstruct which
+  run produced a record ingested before this column existed), and
+  `GET /records` gained an `?ingestion_run_id=` filter so a caller can
+  drill from "this run had 3 flagged rows" straight to exactly those
+  rows. `IngestResult` and the upload endpoint were refactored to read
+  their stats off the same `IngestionRun` row rather than recomputing
+  them separately, so there's one source of truth, not two that could
+  drift.
+
+  **A real gap found while building this, not assumed away:**
+  `rows_total` didn't sum to `rows_clean + rows_flagged +
+  rows_dropped_duplicates` on a re-upload - rows skipped because they
+  matched an already-ingested email (see "Re-uploading a file" above)
+  went completely unaccounted for in any counter. Added
+  `rows_skipped_existing` specifically to close that gap;
+  `tests/test_ingestion_runs.py::test_every_row_is_accounted_for_exactly_once`
+  now asserts the invariant holds, and
+  `test_reuploading_creates_a_second_run_where_every_row_is_skipped_existing`
+  is the regression test for the exact case that exposed it (re-uploading
+  `messy_clients.csv` a second time: `rows_clean=0`, `rows_flagged=0`,
+  and previously nothing else told you where those 5 rows went).
+
+  Frontend: a new "Upload history" page (`/uploads`, linked from the
+  header) listing every past run with its counts, each with a "View
+  records" link that filters the records list down to exactly that
+  run's rows (`?ingestion_run_id=` in the URL, with a "Clear filter"
+  banner) - and the just-completed upload's own result banner now links
+  straight into this history instead of only showing counts that vanish
+  on the next page load.
+
+  Also fixed while adding the `ingestion_runs` table: the test suite's
+  `_clean_tables` fixture (`conftest.py`) truncated a fixed list of
+  tables that didn't include the new one - Postgres refuses to truncate
+  a table another (non-listed) table still has a live FK pointing at, so
+  every DB-touching test failed with `NotSupportedError` until
+  `ingestion_runs` was added to that list. A real, reproducible gotcha of
+  adding any new FK-holding table to this schema, not specific to this
+  feature - worth remembering the next time one gets added.
 - **Manual webhook replay.** `POST /records/{id}/webhooks/replay`
   re-sends a record's notification on demand - a real, separate action
   from the automatic retries above, not another one of them. This is

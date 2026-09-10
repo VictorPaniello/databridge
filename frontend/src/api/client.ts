@@ -1,4 +1,12 @@
-import type { ClientRecord, CurrentUser, IngestResult, RecordsPage, WebhookDelivery } from "./types";
+import type {
+  ClientRecord,
+  CurrentUser,
+  IngestionRun,
+  IngestionRunsPage,
+  IngestResult,
+  RecordsPage,
+  WebhookDelivery,
+} from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL;
 const TOKEN_KEY = "databridge_token";
@@ -220,6 +228,25 @@ export async function uploadFile(file: File): Promise<IngestResult> {
   return request<IngestResult>("/records/upload", { method: "POST", body: formData });
 }
 
+// Same walk-every-page approach as listRecords() below, for the same
+// reason - GET /ingestion-runs is server-paginated (see main.py), and
+// this page just wants the full history, not a manual "load more" flow.
+export async function listIngestionRuns(): Promise<IngestionRun[]> {
+  const all: IngestionRun[] = [];
+  let offset = 0;
+
+  while (true) {
+    const page = await request<IngestionRunsPage>(
+      `/ingestion-runs?limit=500&offset=${offset}`,
+    );
+    all.push(...page.items);
+    offset += page.items.length;
+    if (page.items.length === 0 || offset >= page.total) break;
+  }
+
+  return all;
+}
+
 // GET /records is now server-paginated (a hard cap of 500 rows per
 // request - see main.py) rather than returning every matching row in
 // one unbounded response. RecordsPage.tsx still does its filter/search/
@@ -232,8 +259,12 @@ export async function uploadFile(file: File): Promise<IngestResult> {
 // endpoint without any backend change.
 const MAX_PAGE_SIZE = 500;
 
-export async function listRecords(hasIssues?: boolean): Promise<ClientRecord[]> {
-  const filter = hasIssues === undefined ? "" : `&has_issues=${hasIssues}`;
+export async function listRecords(
+  hasIssues?: boolean,
+  ingestionRunId?: string,
+): Promise<ClientRecord[]> {
+  let filter = hasIssues === undefined ? "" : `&has_issues=${hasIssues}`;
+  if (ingestionRunId) filter += `&ingestion_run_id=${ingestionRunId}`;
   const all: ClientRecord[] = [];
   let offset = 0;
 

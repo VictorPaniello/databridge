@@ -12,6 +12,47 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from databridge.db import Base
 
 
+class IngestionRun(Base):
+    """One row per upload - the persisted, queryable summary of what an
+    ingest actually did, not just what the HTTP response said at the
+    moment it happened. Before this, IngestResult (schemas.py) was the
+    *only* record of a run's outcome - visible in the response body and
+    nowhere else, gone the moment that response was read (or missed:
+    closed tab, a script that didn't log it, a client asking three days
+    later "did my 50,000-row file actually finish?"). Never mutated after
+    creation except to fill in rows_clean/rows_flagged once the row loop
+    that computes them finishes (see ingest.py) - an audit record, not a
+    live-updating one."""
+
+    __tablename__ = "ingestion_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    source_file: Mapped[str] = mapped_column(String, nullable=False)
+    rows_total: Mapped[int] = mapped_column(Integer, nullable=False)
+    rows_clean: Mapped[int] = mapped_column(Integer, nullable=False)
+    rows_flagged: Mapped[int] = mapped_column(Integer, nullable=False)
+    rows_dropped_duplicates: Mapped[int] = mapped_column(Integer, nullable=False)
+    """Rows removed by tidycsv's own within-file dedup (two rows in the
+    *same upload* sharing a key column) - see flag_duplicates in
+    ingest.py. Distinct from rows_skipped_existing below: this is about
+    the file's own internal duplicates, not about what was already in
+    the database before this upload started."""
+    rows_skipped_existing: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    """Rows that matched an email already ingested for this owner in a
+    *previous* upload - re-uploading the same client list is a no-op,
+    not an error (see ingest.py), but those skipped rows still need to
+    be accounted for somewhere, or rows_total stops summing to
+    rows_clean + rows_flagged + rows_dropped_duplicates + this field,
+    which is exactly the gap this field exists to close - found while
+    writing this feature's own tests, not assumed correct."""
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    records: Mapped[list[ClientRecord]] = relationship(back_populates="ingestion_run")
+
+
 class ClientRecord(Base):
     __tablename__ = "client_records"
 
@@ -24,6 +65,16 @@ class ClientRecord(Base):
     ingested before authentication existed have no owner; a record with no
     owner is visible to nobody rather than to everybody, which is the safer
     failure direction for client data."""
+    ingestion_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ingestion_runs.id"), nullable=True, index=True
+    )
+    """Which upload created this record - lets a caller go from "this run
+    had 3 flagged rows" (IngestionRun) to "show me exactly those rows"
+    (GET /records?ingestion_run_id=...) instead of only having per-record
+    has_issues/issues with no way to group them by the upload that
+    produced them. Nullable for the same reason owner_id is: every record
+    that predates this column has no run to point at."""
+    ingestion_run: Mapped[IngestionRun | None] = relationship(back_populates="records")
     source_file: Mapped[str] = mapped_column(String, nullable=False)
     full_name: Mapped[str | None] = mapped_column(String, nullable=True)
     email: Mapped[str | None] = mapped_column(String, nullable=True, index=True)

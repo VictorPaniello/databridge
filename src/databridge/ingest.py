@@ -25,7 +25,7 @@ from tidycsv.cleaner import coerce_and_validate, flag_duplicates, load_input, ma
 from tidycsv.schema import Schema
 
 from databridge.config import settings
-from databridge.models import ClientRecord
+from databridge.models import ClientRecord, IngestionRun
 from databridge.webhooks import notify_new_record
 
 
@@ -35,7 +35,7 @@ def load_schema() -> Schema:
 
 def ingest_file(
     db: Session, filename: str, content: bytes, schema: Schema, owner_id: uuid.UUID
-) -> tuple[list[ClientRecord], dict]:
+) -> tuple[list[ClientRecord], IngestionRun]:
     suffix = Path(filename).suffix or ".csv"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(content)
@@ -55,7 +55,23 @@ def ingest_file(
             {"field": issue.field, "issue": issue.issue}
         )
 
+    # Created up front - rows_clean/rows_flagged are filled in below once
+    # the loop that computes them finishes, but rows_total/
+    # rows_dropped_duplicates are already known here, and run.id needs to
+    # exist before any ClientRecord below can reference it.
+    run = IngestionRun(
+        owner_id=owner_id,
+        source_file=filename,
+        rows_total=len(raw),
+        rows_clean=0,
+        rows_flagged=0,
+        rows_dropped_duplicates=dropped,
+    )
+    db.add(run)
+    db.flush()  # assigns run.id
+
     inserted: list[ClientRecord] = []
+    skipped_existing = 0
     for idx in deduped.index:
         # Column-wise .at[] access, not deduped.iterrows(): iterrows() builds
         # a fresh per-row Series spanning every column, and pandas infers a
@@ -75,10 +91,17 @@ def ingest_file(
                 )
             ).scalar_one_or_none()
             if existing:
-                continue  # already ingested - re-uploading the same list is a no-op, not an error
+                # Already ingested - re-uploading the same list is a no-op,
+                # not an error. Counted, not just skipped silently: without
+                # this, rows_total stops summing to rows_clean +
+                # rows_flagged + rows_dropped_duplicates on a re-upload,
+                # and the run's own numbers no longer account for every row.
+                skipped_existing += 1
+                continue
 
         record = ClientRecord(
             owner_id=owner_id,
+            ingestion_run_id=run.id,
             source_file=filename,
             full_name=deduped.at[idx, "full_name"],
             email=email,
@@ -92,12 +115,13 @@ def ingest_file(
         db.flush()  # assigns record.id before we reference it in the webhook
         inserted.append(record)
 
+    run.rows_flagged = sum(1 for r in inserted if r.has_issues)
+    run.rows_clean = len(inserted) - run.rows_flagged
+    run.rows_skipped_existing = skipped_existing
+
     db.commit()
 
     for record in inserted:
         notify_new_record(db, record)
 
-    return inserted, {
-        "rows_total": len(raw),
-        "rows_dropped_duplicates": dropped,
-    }
+    return inserted, run

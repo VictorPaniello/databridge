@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import * as api from "../api/client";
 import { ApiError } from "../api/client";
 import type { ClientRecord, IngestResult } from "../api/types";
@@ -108,6 +108,8 @@ function StatCard({
 
 export function RecordsPage() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const ingestionRunId = searchParams.get("ingestion_run_id");
   const [records, setRecords] = useState<ClientRecord[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
@@ -120,22 +122,24 @@ export function RecordsPage() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetched once, unfiltered - filter/search/stats are all derived from
-  // this in-memory list below, rather than a fresh request per filter
-  // change. Fine at this project's scale (one engineer's own records),
-  // and it's what makes the stats panel possible without a second
-  // endpoint just to count things the client already has.
+  // Fetched once, unfiltered (beyond an optional ?ingestion_run_id= from
+  // the URL - see the "Upload history" page's "View records" links) -
+  // filter/search/stats are all derived from this in-memory list below,
+  // rather than a fresh request per filter change. Fine at this
+  // project's scale (one engineer's own records), and it's what makes
+  // the stats panel possible without a second endpoint just to count
+  // things the client already has.
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setRecords(await api.listRecords());
+      setRecords(await api.listRecords(undefined, ingestionRunId ?? undefined));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't load records.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [ingestionRunId]);
 
   useEffect(() => {
     load();
@@ -229,6 +233,24 @@ export function RecordsPage() {
         </div>
       </div>
 
+      {ingestionRunId && (
+        <div className="mb-4 flex items-center justify-between rounded-md border border-border bg-secondary/50 px-4 py-2 text-sm">
+          <span>
+            Showing only records from{" "}
+            <Link to="/uploads" className="text-ring hover:underline">
+              one upload
+            </Link>
+          </span>
+          <button
+            type="button"
+            onClick={() => setSearchParams({})}
+            className="text-xs text-muted-foreground hover:underline"
+          >
+            Clear filter
+          </button>
+        </div>
+      )}
+
       {uploadError && (
         <div className="mb-4 rounded-md border border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-900 px-4 py-3 text-sm text-red-700 dark:text-red-300">
           {uploadError}
@@ -242,7 +264,13 @@ export function RecordsPage() {
           <span className="text-amber-600 dark:text-amber-400">
             {lastResult.rows_flagged} flagged
           </span>
-          , {lastResult.rows_dropped_duplicates} duplicate(s) skipped.
+          , {lastResult.rows_dropped_duplicates} duplicate(s) skipped
+          {lastResult.rows_skipped_existing > 0 &&
+            `, ${lastResult.rows_skipped_existing} already ingested`}
+          .{" "}
+          <Link to={`/uploads`} className="text-ring hover:underline">
+            View full history
+          </Link>
         </div>
       )}
 
