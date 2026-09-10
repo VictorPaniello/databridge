@@ -211,16 +211,6 @@ with GitHub instead, and points at Settings for adding a password once
 signed in. See `has_password` in `auth_models.py` and
 `UserManager.forgot_password()` in `auth.py`.
 
-**Email verification is required and strictly enforced.** Registering
-with email+password sends a verification email (same Resend integration);
-until that link is clicked, the account can't touch `/records/*` **or**
-edit its own profile/password (`PATCH /users/me`) - `GET /users/me` is the
-one deliberate exception, since the frontend needs it to even discover
-`is_verified: false` in the first place. GitHub OAuth signups skip this
-entirely (`is_verified_by_default=True` - GitHub already confirmed the
-email). See `current_verified_active_user` in `auth.py` and the split
-GET/PATCH `/users/me` routing in `main.py`.
-
 Colors: emerald (brand/primary) + stone (neutral), both straight from
 Tailwind's own palette - not arbitrary hex - applied as CSS variables so
 every page and the favicon share one source of truth. A manual light/dark
@@ -409,25 +399,6 @@ project's own code or in actually deploying it:
    appeared anywhere, in a real terminal, not a test. Fixed by giving the
    `databridge` logger namespace its own explicit level and handler in
    `main.py`.
-9. **`PATCH /users/me` 403'd for every non-superuser, even a freshly
-   verified one, and the error looked exactly like a verification
-   failure.** Wiring in email verification meant `PATCH /users/me`
-   needed a stricter (`verified=True`) dependency than `GET /users/me`
-   can afford to (see [Frontend](#frontend)) - fastapi-users' router
-   couples both under one flag, so the fix dropped its `PATCH /me` and
-   added a replacement route directly on the app. That left the
-   library's superuser-only `PATCH /{id}` as the *only* remaining PATCH
-   route in that sub-router - and Starlette matched `id="me"` against it
-   before the new route ever got a chance, since sub-router inclusion
-   happened first in registration order. A superuser check failing for
-   a normal user 403s with the exact same bare `{"detail":"Forbidden"}`
-   a verification failure does, so it looked at first like verification
-   itself was broken even after confirming (via direct DB trace) that
-   `is_verified` really was `True` by then. Fixed by dropping all three
-   `/{id}` admin routes outright - this app never sets a superuser, so
-   nothing used them anyway - not just working around the one path they
-   happened to shadow. Locked in with a regression test
-   (`tests/test_email_verification.py`).
 
 ## What it doesn't do (yet)
 
@@ -435,15 +406,21 @@ project's own code or in actually deploying it:
   need a schema per client, not one shared `examples/schema.yaml`.
 - No webhook retry logic - a failed delivery is logged, not automatically
   retried.
-- **Email delivery only reaches the Resend account's own address** - both
-  forgot-password and email-verification are fully implemented (see
-  [Frontend](#frontend)) and independently verified end-to-end, but real
-  inbox delivery to anyone else 403s at Resend until a custom domain is
-  verified there (no code change needed, just a DNS record). A
-  GitHub-OAuth-only account is deliberately refused a password-reset
-  token - see `UserManager.forgot_password()` in `auth.py` - since there's
-  no real password on that account to reset, only Settings (while signed
-  in) can add one.
+- No email verification - fastapi-users supports it, but this project
+  deliberately doesn't enforce it: real Resend delivery only reaches the
+  Resend account's own address without a verified custom domain (see
+  [Frontend](#frontend)'s forgot-password caveat), and requiring
+  verification with delivery that broken would permanently lock out
+  every real registrant but the account owner. Considered and reverted
+  after confirming the delivery limitation against real production
+  sends - worth revisiting once a domain is verified. Password-reset
+  **is** implemented despite the same delivery caveat, since a failed
+  reset only leaves someone unable to self-serve a new password, it
+  never locks them out of an account they already had access to. A
+  GitHub-OAuth-only account is deliberately refused a reset token - see
+  `UserManager.forgot_password()` in `auth.py` - since there's no real
+  password on that account to reset, only Settings (while signed in) can
+  add one.
 - No roles beyond "engineer" - every authenticated user has the same
   permissions on their own records; there's no admin/read-only distinction.
 - **Single uvicorn worker, single Railway instance, single Postgres

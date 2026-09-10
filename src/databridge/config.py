@@ -89,10 +89,10 @@ class Settings(BaseSettings):
 
     resend_api_key: str | None = None
     """Resend (resend.dev) API key, used by auth.py's UserManager to send
-    forgot-password and verify-email emails. None disables real delivery -
-    the link is logged instead (see _send_email in auth.py), which is
-    fine for local dev but must be set in production or nobody can
-    actually receive one."""
+    forgot-password emails. None disables real delivery - the reset link
+    is logged instead (see _send_email in auth.py), which is fine for
+    local dev but must be set in production or nobody can actually
+    receive one."""
     email_from: str = "databridge <onboarding@resend.dev>"
     """Resend's shared onboarding@resend.dev sender - works without
     verifying a custom domain, but ONLY to the Resend account's own

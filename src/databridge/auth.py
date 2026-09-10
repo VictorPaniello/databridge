@@ -41,13 +41,10 @@ logger = logging.getLogger(__name__)
 
 
 async def _send_email(to: str, subject: str, html: str) -> None:
-    """Shared by UserManager's password-reset and email-verification
-    hooks below - same Resend call either way, only the recipient/
-    subject/body differ. None of it ever propagates as an exception: a
-    failed send shouldn't turn either flow's always-succeed response
-    (anti-enumeration on forgot-password, generic 202 on
-    request-verify-token) into a 500 that reveals something differs
-    about this particular request."""
+    """Used by UserManager.on_after_forgot_password below. None of it
+    ever propagates as an exception: a failed send shouldn't turn
+    forgot-password's always-succeed response (anti-enumeration) into a
+    500 that reveals something differs about this particular request."""
     if not settings.resend_api_key:
         # No email provider configured (e.g. local dev) - log instead of
         # silently dropping, same as webhook_url's None-disables pattern
@@ -95,20 +92,17 @@ class UserUpdate(BaseUserUpdate):
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
-    # Used to sign the (separate, short-lived) tokens for password-reset and
-    # email-verification emails - reusing jwt_secret is fine, these are a
-    # different token audience than the login JWT (fastapi-users encodes
-    # that as the "aud" claim) so one being compromised doesn't hand over
-    # the other, and there's no operational reason to manage a second
-    # secret.
+    # Used to sign the (separate, short-lived) tokens for password-reset
+    # emails - reusing jwt_secret is fine, this is a different token
+    # audience than the login JWT (fastapi-users encodes that as the
+    # "aud" claim) so one being compromised doesn't hand over the other,
+    # and there's no operational reason to manage a second secret.
+    # verification_token_secret is required by BaseUserManager even
+    # though this project doesn't send verification emails (see README's
+    # "doesn't do yet" - real delivery to anyone but the Resend account
+    # owner needs a verified domain this project doesn't have).
     reset_password_token_secret = settings.jwt_secret
     verification_token_secret = settings.jwt_secret
-    # fastapi-users defaults this to 1 hour, same as the reset-password
-    # token - reasonable when someone's actively sitting at the reset form,
-    # but a verification email is easy to leave for later (or land in
-    # spam and get noticed a day later); 24h gives real room without
-    # leaving the token valid indefinitely.
-    verification_token_lifetime_seconds = 60 * 60 * 24
 
     async def create(
         self,
@@ -122,45 +116,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         oauth_callback() with a random, nobody-knows-it password. So
         landing here always means a real, user-chosen password exists -
         has_password records that (see auth_models.py's docstring on it
-        and forgot_password() below, which relies on it). super().create()
-        already calls on_after_register() (below) internally, which is
-        what actually sends the verification email - nothing more to do
-        with that here."""
+        and forgot_password() below, which relies on it)."""
         user = await super().create(user_create, safe=safe, request=request)
         return await self.user_db.update(user, {"has_password": True})
-
-    async def on_after_register(self, user: User, request: Request | None = None) -> None:
-        """Fires for both creation paths - this class's own create()
-        above (email+password, via /auth/register) *and*
-        oauth_callback()'s direct user_db.create() for a brand new GitHub
-        signup, since fastapi-users' oauth_callback calls this same hook
-        itself. request_verify() immediately raises UserAlreadyVerified
-        for the GitHub case (main.py registers that router with
-        is_verified_by_default=True - GitHub already confirmed the email
-        on its end, no reason to make someone verify it a second time),
-        so this is a silent no-op there and a real verification email
-        only for email+password signups."""
-        try:
-            await self.request_verify(user, request)
-        except fastapi_users_exceptions.UserAlreadyVerified:
-            pass
-
-    async def on_after_request_verify(
-        self, user: User, token: str, request: Request | None = None
-    ) -> None:
-        verify_url = f"{settings.frontend_url}/verify-email?token={token}"
-        await _send_email(
-            user.email,
-            "Verify your databridge email",
-            "<p>Confirm this is your email address to finish setting up your "
-            "databridge account.</p>"
-            f'<p><a href="{verify_url}">Verify your email</a></p>'
-            "<p>This link expires in 24 hours. If you didn't create a "
-            "databridge account, you can safely ignore this email.</p>",
-        )
-
-    async def on_after_verify(self, user: User, request: Request | None = None) -> None:
-        logger.info("Email verified for %s", user.email)
 
     async def on_after_update(
         self, user: User, update_dict: dict, request: Request | None = None
@@ -324,17 +282,6 @@ current_active_user = fastapi_users.current_user(active=True)
 # an endpoint should still work for anyone, but personalize its response
 # for a signed-in engineer (none of databridge's endpoints use this yet).
 current_active_user_optional = fastapi_users.current_user(active=True, optional=True)
-# Additionally requires is_verified (403, not 401, on an unverified
-# signed-in user - fastapi-users' own distinction between "not
-# authenticated" and "authenticated but not allowed"). Used on every
-# /records/* route and on PATCH /users/me (main.py) - no exception for
-# profile/password edits, an unverified account is locked out of doing
-# anything with the account until it's verified. GET /users/me is the one
-# deliberate exception, kept on plain current_active_user above - it has
-# to stay reachable while unverified so the frontend can even discover
-# is_verified: false in the first place (AuthContext's refreshUser() is
-# what decides whether to redirect to /verify-email-pending at all).
-current_verified_active_user = fastapi_users.current_user(active=True, verified=True)
 
 
 async def forgot_password_handler(
