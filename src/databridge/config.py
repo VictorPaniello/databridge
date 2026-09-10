@@ -48,5 +48,17 @@ class Settings(BaseSettings):
     examples/ is not part of it. The Docker image sets its WORKDIR to where
     examples/ was copied, so the default here resolves correctly there too."""
 
+    jwt_secret: str = "insecure-local-dev-secret-do-not-use-in-production"
+    """Signs the JWTs issued at login. The default is intentionally
+    obviously-fake so a real deployment that forgets to set this notices
+    immediately rather than trusting an unknown value - production sets a
+    real random secret via the environment, never committed."""
+
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+    """GitHub OAuth App credentials (Settings > Developer settings > OAuth
+    Apps in GitHub). None disables the "Sign in with GitHub" flow - email +
+    password login still works without them."""
+
 
 settings = Settings()
