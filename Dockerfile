@@ -10,9 +10,13 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY examples ./examples
+COPY alembic.ini ./
+COPY alembic ./alembic
 
 RUN pip install --no-cache-dir .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "databridge.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Runs pending migrations before starting the server - schema is now
+# Alembic-managed (see CHANGELOG), not created ad hoc by the app itself.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn databridge.main:app --host 0.0.0.0 --port 8000"]

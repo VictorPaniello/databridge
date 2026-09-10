@@ -67,6 +67,8 @@ pip install -e ".[dev]"
 
 cp .env.example .env  # edit DATABASE_URL if needed
 
+alembic upgrade head  # creates/updates the schema - see "Database migrations" below
+
 uvicorn databridge.main:app --reload --app-dir src
 ```
 
@@ -85,6 +87,22 @@ API path actually works.
 pytest
 ruff check .
 ```
+
+## Database migrations
+
+Schema changes go through [Alembic](https://alembic.sqlalchemy.org/), not
+`Base.metadata.create_all()` - that only ever creates missing tables, it
+never alters a table that already exists (found the hard way: adding a
+column to an already-deployed table silently did nothing until Alembic
+was introduced).
+
+```bash
+alembic upgrade head                              # apply pending migrations
+alembic revision --autogenerate -m "short message" # generate a new one after changing models.py/auth_models.py
+```
+
+The Docker image runs `alembic upgrade head` before starting the server
+(see the `CMD` in the Dockerfile), so a deploy always migrates first.
 
 ## Docker
 

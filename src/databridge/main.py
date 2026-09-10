@@ -3,29 +3,27 @@
 from __future__ import annotations
 
 import uuid
-from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-import databridge.auth_models  # noqa: F401 - registers users/oauth_account on Base.metadata
-from databridge.db import Base, engine, get_db
+# Registers users/oauth_account on Base.metadata - not used directly here,
+# but tests' create_all() (see conftest.py) needs every table module
+# imported somewhere in this chain to know about them.
+import databridge.auth_models  # noqa: F401
+from databridge.db import get_db
 from databridge.ingest import ingest_file, load_schema
 from databridge.models import ClientRecord, WebhookDelivery
 from databridge.schemas import ClientRecordOut, IngestResult, WebhookDeliveryOut
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Creates tables if they don't exist yet. A larger production system
-    # would use Alembic migrations instead - fine for this project's scope,
-    # called out honestly rather than pretending this is migration-managed.
-    Base.metadata.create_all(bind=engine)
-    yield
-
-
-app = FastAPI(title="databridge", lifespan=lifespan)
+# Schema is Alembic-managed now (see alembic/), not created on startup -
+# `alembic upgrade head` runs before the app starts (Dockerfile's CMD;
+# locally, run it by hand once after pulling schema changes). The previous
+# Base.metadata.create_all() on every startup only ever created missing
+# tables, never altered existing ones - real bugs found once a column
+# needed adding to an already-deployed table (see CHANGELOG).
+app = FastAPI(title="databridge")
 
 
 @app.get("/health")
