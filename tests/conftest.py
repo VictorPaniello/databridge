@@ -7,6 +7,7 @@ Postgres itself does differently from an assumption baked into a mock."""
 from __future__ import annotations
 
 import os
+import uuid
 
 os.environ.setdefault(
     "DATABASE_URL", "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/databridge_test"
@@ -17,6 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+import databridge.auth_models  # noqa: F401 - registers users/oauth_account on Base.metadata
 from databridge.db import Base, SessionLocal, engine, get_db
 from databridge.main import app
 
@@ -26,7 +28,7 @@ def _clean_tables():
     Base.metadata.create_all(bind=engine)
     yield
     with engine.begin() as conn:
-        conn.exec_driver_sql("TRUNCATE webhook_deliveries, client_records")
+        conn.exec_driver_sql("TRUNCATE webhook_deliveries, client_records, oauth_account, users")
 
 
 @pytest.fixture
@@ -38,15 +40,48 @@ def db() -> Session:
         session.close()
 
 
+def _override_get_db() -> None:
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def _authenticated_client() -> TestClient:
+    """A TestClient logged in as a fresh, real engineer - goes through the
+    actual register + JWT login endpoints rather than bypassing auth, so
+    every test that uses one of these also exercises the real auth path
+    production traffic goes through."""
+    app.dependency_overrides[get_db] = _override_get_db
+    test_client = TestClient(app)
+
+    email = f"test-{uuid.uuid4()}@example.com"
+    password = "test-password-not-real-123"
+    register_resp = test_client.post(
+        "/auth/register", json={"email": email, "password": password}
+    )
+    assert register_resp.status_code == 201, register_resp.text
+    login_resp = test_client.post(
+        "/auth/jwt/login", data={"username": email, "password": password}
+    )
+    assert login_resp.status_code == 200, login_resp.text
+    token = login_resp.json()["access_token"]
+    test_client.headers.update({"Authorization": f"Bearer {token}"})
+    return test_client
+
+
 @pytest.fixture
 def client() -> TestClient:
-    def override_get_db():
-        session = SessionLocal()
-        try:
-            yield session
-        finally:
-            session.close()
+    test_client = _authenticated_client()
+    yield test_client
+    app.dependency_overrides.clear()
 
-    app.dependency_overrides[get_db] = override_get_db
-    yield TestClient(app)
+
+@pytest.fixture
+def other_client() -> TestClient:
+    """A second engineer, logged in separately from `client` - for tests
+    that verify one engineer can't see another's client records."""
+    test_client = _authenticated_client()
+    yield test_client
     app.dependency_overrides.clear()

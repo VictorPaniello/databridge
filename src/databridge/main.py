@@ -17,9 +17,11 @@ from databridge.auth import (
     UserRead,
     UserUpdate,
     auth_backend,
+    current_active_user,
     fastapi_users,
     get_github_oauth_client,
 )
+from databridge.auth_models import User
 from databridge.config import settings
 from databridge.db import get_db
 from databridge.ingest import ingest_file, load_schema
@@ -65,10 +67,14 @@ def health() -> dict:
 
 
 @app.post("/records/upload", response_model=IngestResult)
-async def upload_records(file: UploadFile, db: Session = Depends(get_db)) -> IngestResult:
+async def upload_records(
+    file: UploadFile,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_active_user),
+) -> IngestResult:
     content = await file.read()
     schema = load_schema()
-    inserted, stats = ingest_file(db, file.filename or "upload.csv", content, schema)
+    inserted, stats = ingest_file(db, file.filename or "upload.csv", content, schema, user.id)
     return IngestResult(
         rows_total=stats["rows_total"],
         rows_clean=len(inserted) - sum(1 for r in inserted if r.has_issues),
@@ -79,25 +85,45 @@ async def upload_records(file: UploadFile, db: Session = Depends(get_db)) -> Ing
 
 
 @app.get("/records", response_model=list[ClientRecordOut])
-def list_records(has_issues: bool | None = None, db: Session = Depends(get_db)) -> list:
-    query = select(ClientRecord).order_by(ClientRecord.created_at.desc())
+def list_records(
+    has_issues: bool | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_active_user),
+) -> list:
+    query = (
+        select(ClientRecord)
+        .where(ClientRecord.owner_id == user.id)
+        .order_by(ClientRecord.created_at.desc())
+    )
     if has_issues is not None:
         query = query.where(ClientRecord.has_issues == has_issues)
     return db.execute(query).scalars().all()
 
 
-@app.get("/records/{record_id}", response_model=ClientRecordOut)
-def get_record(record_id: uuid.UUID, db: Session = Depends(get_db)) -> ClientRecord:
+def _get_owned_record(db: Session, record_id: uuid.UUID, user: User) -> ClientRecord:
+    """404, not 403, when the record belongs to someone else - existence of
+    another engineer's client record shouldn't be observable at all."""
     record = db.get(ClientRecord, record_id)
-    if record is None:
+    if record is None or record.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Record not found")
     return record
 
 
+@app.get("/records/{record_id}", response_model=ClientRecordOut)
+def get_record(
+    record_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_active_user),
+) -> ClientRecord:
+    return _get_owned_record(db, record_id, user)
+
+
 @app.get("/records/{record_id}/webhooks", response_model=list[WebhookDeliveryOut])
-def get_record_webhooks(record_id: uuid.UUID, db: Session = Depends(get_db)) -> list:
-    record = db.get(ClientRecord, record_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="Record not found")
+def get_record_webhooks(
+    record_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_active_user),
+) -> list:
+    _get_owned_record(db, record_id, user)
     query = select(WebhookDelivery).where(WebhookDelivery.record_id == record_id)
     return db.execute(query).scalars().all()

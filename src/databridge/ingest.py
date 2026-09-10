@@ -16,6 +16,7 @@ original position and can be matched against `issues` directly."""
 from __future__ import annotations
 
 import tempfile
+import uuid
 from pathlib import Path
 
 from sqlalchemy import select
@@ -33,7 +34,7 @@ def load_schema() -> Schema:
 
 
 def ingest_file(
-    db: Session, filename: str, content: bytes, schema: Schema
+    db: Session, filename: str, content: bytes, schema: Schema, owner_id: uuid.UUID
 ) -> tuple[list[ClientRecord], dict]:
     suffix = Path(filename).suffix or ".csv"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -65,13 +66,19 @@ def ingest_file(
         row_issues = issue_map.get(idx)
         email = deduped.at[idx, "email"]
         if email:
+            # Scoped to this owner: two different engineers uploading a
+            # client with the same email are two separate records, not a
+            # duplicate of each other's - each engineer's dedup is their own.
             existing = db.execute(
-                select(ClientRecord).where(ClientRecord.email == email)
+                select(ClientRecord).where(
+                    ClientRecord.email == email, ClientRecord.owner_id == owner_id
+                )
             ).scalar_one_or_none()
             if existing:
                 continue  # already ingested - re-uploading the same list is a no-op, not an error
 
         record = ClientRecord(
+            owner_id=owner_id,
             source_file=filename,
             full_name=deduped.at[idx, "full_name"],
             email=email,

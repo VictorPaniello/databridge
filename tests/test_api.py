@@ -2,6 +2,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from databridge.main import app
+
 FIXTURES = Path(__file__).parent.parent / "examples"
 
 
@@ -87,3 +89,38 @@ def test_no_webhook_deliveries_when_webhook_url_unset(client: TestClient):
     record_id = records[0]["id"]
     deliveries = client.get(f"/records/{record_id}/webhooks").json()
     assert deliveries == []
+
+
+def test_upload_without_a_token_is_rejected(client: TestClient):
+    # `client` comes pre-authenticated (see conftest.py) - this checks the
+    # protection actually exists by calling with no Authorization header.
+    unauthenticated = TestClient(app)
+    response = _upload(unauthenticated)
+    assert response.status_code == 401
+
+
+def test_engineer_cannot_see_another_engineers_records(
+    client: TestClient, other_client: TestClient
+):
+    my_records = _upload(client).json()["records"]
+    _upload(other_client)  # a second engineer uploads the same file independently
+
+    # Each engineer's own duplicate-by-email check still fires - only
+    # cross-engineer isolation is being tested here, not dedup.
+    assert len(_upload(client).json()["records"]) == 0
+
+    my_view = client.get("/records").json()
+    other_view = other_client.get("/records").json()
+    assert {r["id"] for r in my_view} == {r["id"] for r in my_records}
+    assert {r["id"] for r in other_view}.isdisjoint({r["id"] for r in my_records})
+
+
+def test_engineer_gets_404_not_403_for_another_engineers_record(
+    client: TestClient, other_client: TestClient
+):
+    my_record_id = _upload(client).json()["records"][0]["id"]
+    response = other_client.get(f"/records/{my_record_id}")
+    assert response.status_code == 404  # existence of the record isn't revealed either
+
+    response = other_client.get(f"/records/{my_record_id}/webhooks")
+    assert response.status_code == 404
