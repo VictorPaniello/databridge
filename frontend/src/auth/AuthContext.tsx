@@ -17,7 +17,10 @@ interface AuthState {
   loginWithPassword: (email: string, password: string) => Promise<void>;
   loginWithToken: (token: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
-  completeProfile: (input: ProfileUpdate) => Promise<void>;
+  // Used both by CompleteProfilePage (the forced GitHub-OAuth-signup flow)
+  // and SettingsPage (editing an already-complete profile) - same
+  // PATCH /users/me underneath either way.
+  updateProfile: (input: ProfileUpdate) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -62,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loginWithPassword(input.email, input.password);
   }, [loginWithPassword]);
 
-  const completeProfile = useCallback(async (input: ProfileUpdate) => {
+  const updateProfile = useCallback(async (input: ProfileUpdate) => {
     setUser(await api.updateProfile(input));
   }, []);
 
@@ -90,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginWithPassword,
         loginWithToken,
         register,
-        completeProfile,
+        updateProfile,
         logout,
       }}
     >

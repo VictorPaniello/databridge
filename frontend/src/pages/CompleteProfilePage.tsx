@@ -12,7 +12,7 @@ import { COUNTRY_CODES } from "../data/countryCodes";
 // Nothing else in the app is reachable until this is filled in (see
 // AuthContext's needsProfile).
 export function CompleteProfilePage() {
-  const { user, completeProfile } = useAuth();
+  const { user, updateProfile } = useAuth();
   const navigate = useNavigate();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -27,7 +27,7 @@ export function CompleteProfilePage() {
     setSubmitting(true);
     try {
       const phone = phoneNumber.trim() ? `${dialCode} ${phoneNumber.trim()}` : undefined;
-      await completeProfile({ firstName, lastName, phone });
+      await updateProfile({ firstName, lastName, phone });
       navigate("/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
