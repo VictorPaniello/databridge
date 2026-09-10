@@ -87,10 +87,30 @@ function SortableHeader({
   );
 }
 
+function StatCard({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-md border border-border bg-card px-4 py-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={`text-2xl font-semibold tracking-tight ${valueClassName ?? ""}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
 export function RecordsPage() {
   const { user } = useAuth();
   const [records, setRecords] = useState<ClientRecord[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
+  const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,29 +120,51 @@ export function RecordsPage() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const hasIssues = filter === "all" ? undefined : filter === "flagged";
-
+  // Fetched once, unfiltered - filter/search/stats are all derived from
+  // this in-memory list below, rather than a fresh request per filter
+  // change. Fine at this project's scale (one engineer's own records),
+  // and it's what makes the stats panel possible without a second
+  // endpoint just to count things the client already has.
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setRecords(await api.listRecords(hasIssues));
+      setRecords(await api.listRecords());
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't load records.");
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+  }, []);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  const stats = useMemo(() => {
+    const total = records.length;
+    const flagged = records.filter((r) => r.has_issues).length;
+    return { total, clean: total - flagged, flagged };
+  }, [records]);
+
+  const filteredRecords = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return records.filter((r) => {
+      if (filter === "clean" && r.has_issues) return false;
+      if (filter === "flagged" && !r.has_issues) return false;
+      if (query) {
+        const matchesName = r.full_name?.toLowerCase().includes(query);
+        const matchesEmail = r.email?.toLowerCase().includes(query);
+        if (!matchesName && !matchesEmail) return false;
+      }
+      return true;
+    });
+  }, [records, filter, search]);
+
   const sortedRecords = useMemo(() => {
-    if (!sort) return records;
-    return [...records].sort((a, b) => compareRecords(a, b, sort));
-  }, [records, sort]);
+    if (!sort) return filteredRecords;
+    return [...filteredRecords].sort((a, b) => compareRecords(a, b, sort));
+  }, [filteredRecords, sort]);
 
   function handleSort(key: SortKey) {
     setSort((prev) => {
@@ -204,20 +246,45 @@ export function RecordsPage() {
         </div>
       )}
 
-      <div className="flex gap-2 mb-4 text-sm">
-        {(["all", "clean", "flagged"] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`rounded-full px-3 py-1 border transition ${
-              filter === f
-                ? "bg-primary text-primary-foreground border-primary"
-                : "border-border hover:bg-secondary"
-            }`}
-          >
-            {f === "all" ? "All" : f === "clean" ? "Clean" : "Flagged"}
-          </button>
-        ))}
+      {!loading && !error && records.length > 0 && (
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <StatCard label="Total records" value={String(stats.total)} />
+          <StatCard label="Clean" value={String(stats.clean)} valueClassName="text-primary" />
+          <StatCard
+            label="Flagged"
+            value={
+              stats.total === 0
+                ? "0"
+                : `${stats.flagged} (${Math.round((stats.flagged / stats.total) * 100)}%)`
+            }
+            valueClassName="text-amber-600 dark:text-amber-400"
+          />
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex gap-2 text-sm">
+          {(["all", "clean", "flagged"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`rounded-full px-3 py-1 border transition ${
+                filter === f
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-border hover:bg-secondary"
+              }`}
+            >
+              {f === "all" ? "All" : f === "clean" ? "Clean" : "Flagged"}
+            </button>
+          ))}
+        </div>
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name or email…"
+          className="ml-auto w-full sm:w-64 rounded-md border border-input bg-transparent px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+        />
       </div>
 
       {loading ? (
@@ -228,6 +295,8 @@ export function RecordsPage() {
         <p className="text-muted-foreground text-sm">
           No records yet. Upload a CSV or Excel file to get started.
         </p>
+      ) : sortedRecords.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No records match this filter/search.</p>
       ) : (
         <div className="overflow-x-auto rounded-md border border-border">
           <table className="w-full text-sm">
