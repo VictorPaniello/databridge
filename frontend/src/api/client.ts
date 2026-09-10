@@ -143,6 +143,28 @@ export async function getCurrentUser(): Promise<CurrentUser> {
   return request<CurrentUser>("/users/me");
 }
 
+export interface ProfileUpdate {
+  firstName: string;
+  lastName: string;
+  phone?: string;
+}
+
+// PATCH /users/me is fastapi-users' generic update route - accepts a
+// partial UserUpdate body (see auth.py), which is why first_name/
+// last_name/phone can be set here the same way GitHub OAuth signups
+// complete their profile as email+password ones set it at registration.
+export async function updateProfile(input: ProfileUpdate): Promise<CurrentUser> {
+  return request<CurrentUser>("/users/me", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      first_name: input.firstName,
+      last_name: input.lastName,
+      phone: input.phone || null,
+    }),
+  });
+}
+
 // Not fetched: this used to be `await fetch("/auth/github/authorize")`
 // then `window.location.href = <the JSON body's authorization_url>`, but
 // that route sets a CSRF cookie the browser needs to send back on the

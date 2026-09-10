@@ -1,15 +1,23 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import * as api from "../api/client";
-import type { RegisterInput } from "../api/client";
+import type { ProfileUpdate, RegisterInput } from "../api/client";
 import type { CurrentUser } from "../api/types";
 
 interface AuthState {
   user: CurrentUser | null;
   loading: boolean;
+  // True once `user` is loaded and it's a real signed-in account missing
+  // first_name - always a GitHub OAuth signup (that flow bypasses
+  // UserCreate's required first_name/last_name entirely - see auth.py's
+  // UserRead docstring). Drives ProtectedRoute's redirect to
+  // /complete-profile: nothing else in the app should be reachable until
+  // this is false.
+  needsProfile: boolean;
   loginWithPassword: (email: string, password: string) => Promise<void>;
   loginWithToken: (token: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
+  completeProfile: (input: ProfileUpdate) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -54,6 +62,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loginWithPassword(input.email, input.password);
   }, [loginWithPassword]);
 
+  const completeProfile = useCallback(async (input: ProfileUpdate) => {
+    setUser(await api.updateProfile(input));
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await api.logout();
@@ -67,9 +79,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const needsProfile = user !== null && !user.first_name;
+
   return (
     <AuthContext.Provider
-      value={{ user, loading, loginWithPassword, loginWithToken, register, logout }}
+      value={{
+        user,
+        loading,
+        needsProfile,
+        loginWithPassword,
+        loginWithToken,
+        register,
+        completeProfile,
+        logout,
+      }}
     >
       {children}
     </AuthContext.Provider>
