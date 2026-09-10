@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile
@@ -25,6 +26,7 @@ from databridge.auth import (
     auth_backend,
     current_active_user,
     fastapi_users,
+    forgot_password_handler,
     get_github_oauth_client,
     make_github_authorize_redirect,
     oauth_redirect_backend,
@@ -35,6 +37,23 @@ from databridge.db import get_db
 from databridge.ingest import ingest_file, load_schema
 from databridge.models import ClientRecord, WebhookDelivery
 from databridge.schemas import ClientRecordOut, IngestResult, WebhookDeliveryOut
+
+# Nothing else in this process configures logging - Python's root logger
+# defaults to WARNING with zero handlers attached, so a plain
+# logger.info(...) anywhere under the "databridge" namespace (auth.py's
+# password-reset logging, notably) would be silently discarded at the
+# effective-level check before it ever reached output, in both `uvicorn
+# --reload` locally and the real Dockerfile CMD on Railway - found by
+# actually looking for the logged reset link during manual testing and
+# finding nothing, not by inspecting this in isolation. uvicorn's own
+# dictConfig (uvicorn.config.LOGGING_CONFIG) only wires up its own
+# "uvicorn"/"uvicorn.access" loggers, so this app's own logger needs its
+# own explicit level + handler; propagate=False keeps it from also
+# duplicating through root if root ever gets a handler configured later.
+_databridge_logger = logging.getLogger("databridge")
+_databridge_logger.setLevel(logging.INFO)
+_databridge_logger.addHandler(logging.StreamHandler())
+_databridge_logger.propagate = False
 
 # Schema is Alembic-managed now (see alembic/), not created on startup -
 # `alembic upgrade head` runs before the app starts (Dockerfile's CMD;
@@ -82,6 +101,27 @@ for _route in _register_router.routes:
     if _route.path == "/register":
         _route.endpoint = limiter.limit(_STRICT_AUTH_LIMIT)(_route.endpoint)
 app.include_router(_register_router, prefix="/auth", tags=["auth"])
+
+# Both routes get the strict limit: /forgot-password because it's the
+# enumeration/spam-mail surface (an attacker hammering it either floods a
+# victim's inbox or - if the response ever timed differently - could probe
+# which emails are registered), /reset-password because it's a brute-force
+# surface against the token itself, same threat model as /login above.
+_reset_router = fastapi_users.get_reset_password_router()
+for _route in _reset_router.routes:
+    if _route.path == "/forgot-password":
+        # Swapped for forgot_password_handler (auth.py) the same way
+        # /authorize is swapped onto the GitHub router below - the
+        # library's own endpoint can't tell the frontend a GitHub-only
+        # account was refused a reset token (see UserManager.
+        # forgot_password()'s docstring for why it's refused at all).
+        # The route's own decorator-configured status_code (202) still
+        # applies - only the endpoint function underneath is replaced.
+        _route.endpoint = limiter.limit(_STRICT_AUTH_LIMIT)(forgot_password_handler)
+    elif _route.path == "/reset-password":
+        _route.endpoint = limiter.limit(_STRICT_AUTH_LIMIT)(_route.endpoint)
+app.include_router(_reset_router, prefix="/auth", tags=["auth"])
+
 app.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate), prefix="/users", tags=["users"]
 )

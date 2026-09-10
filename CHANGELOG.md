@@ -20,6 +20,37 @@ nothing has been tagged as a release yet, so everything below is under
   `/auth/register`'s required first_name/last_name entirely) are now
   forced through a `/complete-profile` step before anything else in
   the app is reachable, via `ProtectedRoute`.
+- Frontend: the records list is fetched once (unfiltered) and status
+  filtering, name/email search, and per-column sorting (alphabetic for
+  strings, numeric for `amount`, including the Status column) all run
+  client-side over that single list via `useMemo`, instead of a fresh API
+  call per filter click. A stats panel (total/clean/flagged counts and
+  flagged %) is derived the same way.
+- Frontend: delete (both the records list and the record detail page) now
+  confirms through an in-app `ConfirmDialog` instead of the browser's
+  native `confirm()`, and the Delete button has a subtle shadow to read as
+  more clearly actionable.
+- Frontend: an Account settings page (`/settings`) for editing profile
+  fields and changing password, reachable via a profile icon in the header
+  (replacing the earlier gear icon). `PATCH /users/me` already supported a
+  `password` field (fastapi-users' `BaseUserUpdate`, routed through the
+  same `UserManager.validate_password` policy registration uses) - no
+  backend change was needed for this.
+- Forgot/reset password (`/forgot-password`, `/reset-password?token=...`),
+  wired onto fastapi-users' own reset-password router. Emails are sent via
+  [Resend](https://resend.com) (`RESEND_API_KEY`, `EMAIL_FROM`) - unset
+  locally, which logs the reset link instead of sending it. Both routes
+  carry the same strict per-IP rate limit as `/login` and `/register`.
+- A `has_password` flag on `users` (new column + backfill migration,
+  `auth_models.py`) distinguishes an account with a real, user-chosen
+  password from a GitHub-OAuth-only signup (which fastapi-users gives a
+  random, nobody-knows-it password internally, so `hashed_password` alone
+  can't tell the two apart). `UserManager` sets it on registration and on
+  any password change/reset; `/auth/forgot-password` checks it before
+  issuing a token, so a GitHub-only account can't have password auth
+  bootstrapped onto it through an unauthenticated email link - it gets a
+  distinct "signs in with GitHub only" response instead, pointing at
+  Settings (see above) for adding a password while already signed in.
 
 ### Fixed
 - **The country-code `<select>`'s option list was barely readable in
@@ -54,6 +85,14 @@ nothing has been tagged as a release yet, so everything below is under
   Prompted by hitting the same stale-schema problem a third time
   locally (while adding the profile fields below) and the user asking
   whether `create_all()` should even be able to alter existing tables.
+- **`logger.info(...)` was silently discarded everywhere in the app**,
+  locally and in production - nothing configured logging, so Python's
+  root logger sat at its `WARNING` default with zero handlers, and
+  uvicorn's own log config only wires up its own loggers. Found while
+  adding forgot/reset password (above): the no-`RESEND_API_KEY`
+  dev-fallback log line never appeared anywhere, checked in a real
+  terminal, not assumed working. Fixed by giving the `databridge` logger
+  namespace its own explicit level and handler in `main.py`.
 
 ### Added
 - Frontend (`frontend/`): a React + TypeScript SPA - login (email+password

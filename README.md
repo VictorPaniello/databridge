@@ -179,16 +179,27 @@ is pulled from its GitHub repo, not from PyPI.
 ## Frontend
 
 A React + TypeScript SPA in `frontend/` (Vite + Tailwind) - the whole API
-surface: email+password and GitHub OAuth login, registration (first/last
-name required, phone optional with a country-code picker), upload, a
-filterable records list, a record detail view with its webhook delivery
-history, and delete.
+surface: email+password and GitHub OAuth login, forgot/reset password,
+registration (first/last name required, phone optional with a country-code
+picker), upload, a searchable and sortable records list with a stats
+panel, a record detail view with its webhook delivery history, delete, and
+an account settings page (profile fields + change password).
 
 **GitHub OAuth signups must complete their profile before anything else
 is usable.** That flow bypasses `/auth/register` entirely (fastapi-users
 creates the user directly), so a GitHub signup only ever has an email -
 `ProtectedRoute` redirects to `/complete-profile` for every guarded route
 until `first_name` is set (`PATCH /users/me`).
+
+**Forgot password** (`/forgot-password` → email → `/reset-password?token=...`)
+sends a real email via [Resend](https://resend.com) (`RESEND_API_KEY`,
+optional - unset locally logs the link instead of sending it). A
+GitHub-OAuth-only account (never had a real, user-chosen password) is
+refused a reset token rather than letting an unauthenticated email link
+bootstrap password auth onto it - the page tells the visitor to continue
+with GitHub instead, and points at Settings for adding a password once
+signed in. See `has_password` in `auth_models.py` and
+`UserManager.forgot_password()` in `auth.py`.
 
 Colors: emerald (brand/primary) + stone (neutral), both straight from
 Tailwind's own palette - not arbitrary hex - applied as CSS variables so
@@ -222,7 +233,8 @@ redirect to work.
 Deployed on [Railway](https://railway.app) — a Postgres instance and this
 service in the same project. Environment variables (`DATABASE_URL`,
 `WEBHOOK_URL`, `WEBHOOK_SECRET`, `JWT_SECRET`, `GITHUB_CLIENT_ID`,
-`GITHUB_CLIENT_SECRET`) are set in Railway's dashboard, never committed.
+`GITHUB_CLIENT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`) are set in
+Railway's dashboard, never committed.
 
 Uvicorn runs with `--proxy-headers --forwarded-allow-ips='*'` (see the
 Dockerfile) - without it, every request looks like plain `http://` to the
@@ -366,6 +378,17 @@ project's own code or in actually deploying it:
    fastapi-users' own CSRF/state-generation functions rather than
    reimplementing them - so the browser's own top-level navigation to the
    API's domain is what sets the cookie, first-party.
+8. **`logger.info(...)` calls were silently discarded, everywhere in the
+   app, in both local dev and production.** Nothing in the process
+   configures logging - Python's root logger defaults to `WARNING` with
+   zero handlers attached, so an INFO record gets dropped at the
+   effective-level check before it ever reaches output; uvicorn's own
+   `dictConfig` only wires up its own `uvicorn`/`uvicorn.access` loggers,
+   never root or this app's. Found while adding the forgot-password flow
+   below: the dev-fallback log line (no `RESEND_API_KEY` configured) never
+   appeared anywhere, in a real terminal, not a test. Fixed by giving the
+   `databridge` logger namespace its own explicit level and handler in
+   `main.py`.
 
 ## What it doesn't do (yet)
 
@@ -373,9 +396,12 @@ project's own code or in actually deploying it:
   need a schema per client, not one shared `examples/schema.yaml`.
 - No webhook retry logic - a failed delivery is logged, not automatically
   retried.
-- No email verification or password-reset flow - fastapi-users supports
-  both, but this project doesn't send the emails yet, so an engineer who
-  loses their password currently has no self-service way back in.
+- No email verification - fastapi-users supports it, but this project
+  doesn't send that email yet. Password-reset **is** implemented (see
+  [Frontend](#frontend)): a GitHub-OAuth-only account is deliberately
+  refused a reset token though - see `UserManager.forgot_password()` in
+  `auth.py` - since there's no real password on that account to reset,
+  only Settings (while signed in) can add one.
 - No roles beyond "engineer" - every authenticated user has the same
   permissions on their own records; there's no admin/read-only distinction.
 - **Single uvicorn worker, single Railway instance, single Postgres

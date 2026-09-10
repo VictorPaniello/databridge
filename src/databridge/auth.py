@@ -5,13 +5,16 @@ registered in main.py, using the objects defined here."""
 
 from __future__ import annotations
 
+import logging
 import re
 import uuid
 
-from fastapi import Depends, Request, Response
+import httpx
+from fastapi import Body, Depends, Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordBearer
 from fastapi_users import BaseUserManager, FastAPIUsers, InvalidPasswordException, UUIDIDMixin
+from fastapi_users import exceptions as fastapi_users_exceptions
 from fastapi_users.authentication import AuthenticationBackend, BearerTransport, JWTStrategy
 from fastapi_users.authentication.transport.base import (
     Transport,
@@ -26,13 +29,15 @@ from fastapi_users.router.oauth import (
 )
 from fastapi_users.schemas import BaseUser, BaseUserCreate, BaseUserUpdate
 from httpx_oauth.clients.github import GitHubOAuth2
-from pydantic import Field
+from pydantic import EmailStr, Field
 
 from databridge.auth_db import get_user_db
 from databridge.auth_models import User
 from databridge.config import settings
 
 MIN_PASSWORD_LENGTH = 8
+
+logger = logging.getLogger(__name__)
 
 
 class UserRead(BaseUser[uuid.UUID]):
@@ -63,10 +68,120 @@ class UserUpdate(BaseUserUpdate):
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     # Used to sign the (separate, short-lived) tokens for password-reset and
-    # email-verification emails - reusing jwt_secret is fine since this
-    # project doesn't send those emails yet (see README's "doesn't do yet").
+    # email-verification emails - reusing jwt_secret is fine, these are a
+    # different token audience than the login JWT (fastapi-users encodes
+    # that as the "aud" claim) so one being compromised doesn't hand over
+    # the other, and there's no operational reason to manage a second
+    # secret. Email verification itself still isn't sent (see README's
+    # "doesn't do yet") - only password-reset emails are, below.
     reset_password_token_secret = settings.jwt_secret
     verification_token_secret = settings.jwt_secret
+
+    async def create(
+        self,
+        user_create: UserCreate,
+        safe: bool = False,
+        request: Request | None = None,
+    ) -> User:
+        """Only reached by email+password registration (fastapi-users'
+        /auth/register route) - a GitHub OAuth signup never calls this,
+        it creates the row directly via user_db.create() inside
+        oauth_callback() with a random, nobody-knows-it password. So
+        landing here always means a real, user-chosen password exists -
+        has_password records that (see auth_models.py's docstring on it
+        and forgot_password() below, which relies on it)."""
+        user = await super().create(user_create, safe=safe, request=request)
+        return await self.user_db.update(user, {"has_password": True})
+
+    async def on_after_update(
+        self, user: User, update_dict: dict, request: Request | None = None
+    ) -> None:
+        """update_dict is exactly what was applied - present here whether
+        this came from the Settings page's PATCH /users/me (change-
+        password form) or anything else that touches password through the
+        same generic update path. reset_password() (below) doesn't route
+        through here - it has its own dedicated on_after_reset_password
+        hook, also updated to set this flag."""
+        if "password" in update_dict:
+            await self.user_db.update(user, {"has_password": True})
+
+    async def forgot_password(self, user: User, request: Request | None = None) -> None:
+        """Overrides the base implementation to add one more gate before
+        it generates a token: an account that's never had a real,
+        user-chosen password (GitHub-OAuth-only, has_password still
+        False) gets no token and no email - the whole point being that a
+        password can't be bootstrapped onto such an account through an
+        unauthenticated email link, only explicitly from Settings while
+        already signed in with GitHub. main.py's route wrapper checks
+        has_password itself to tell the frontend which case this was
+        (worth noting: that does mean confirming a bit more than the
+        plain "202 either way" default - that the account exists *and*
+        is GitHub-only - a deliberate, explicit tradeoff over silently
+        letting the email path add password auth to an account nobody
+        opted it into)."""
+        if not user.has_password:
+            return
+        await super().forgot_password(user, request)
+
+    async def on_after_forgot_password(
+        self, user: User, token: str, request: Request | None = None
+    ) -> None:
+        """Called by fastapi-users' /auth/forgot-password route, and only
+        when the submitted email belongs to an existing user with
+        has_password already True (forgot_password() above - a
+        nonexistent email, or a GitHub-only one, never reaches here or
+        generates a token) - so this can never be used to create an
+        account, or add password auth to one that never had it.
+
+        `token` already embeds a fingerprint of the user's *current*
+        password hash and a 1-hour expiry (fastapi-users'
+        forgot_password()), so it self-invalidates the moment the
+        password changes through any other path (a second reset request,
+        the Settings page's own change-password form) - no extra
+        single-use bookkeeping needed here."""
+        reset_url = f"{settings.frontend_url}/reset-password?token={token}"
+        if not settings.resend_api_key:
+            # No email provider configured (e.g. local dev) - log instead
+            # of silently dropping, same as webhook_url's None-disables
+            # pattern elsewhere in this file/config.py. Never acceptable
+            # left unset in production, where nobody can read this log.
+            logger.info("Password reset requested for %s: %s", user.email, reset_url)
+            return
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            try:
+                response = await client.post(
+                    "https://api.resend.com/emails",
+                    headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+                    json={
+                        "from": settings.email_from,
+                        "to": [user.email],
+                        "subject": "Reset your databridge password",
+                        "html": (
+                            "<p>Someone requested a password reset for your "
+                            "databridge account.</p>"
+                            f'<p><a href="{reset_url}">Reset your password</a></p>'
+                            "<p>This link expires in 1 hour and can only be used "
+                            "once. If you didn't request this, you can safely "
+                            "ignore this email - your password hasn't changed.</p>"
+                        ),
+                    },
+                )
+                response.raise_for_status()
+            except httpx.HTTPError:
+                # Never raised further: the /forgot-password route always
+                # returns 202 regardless (anti-enumeration), and a failed
+                # send shouldn't turn into a 500 that reveals anything
+                # differs about this particular email address.
+                logger.exception("Failed to send password reset email to %s", user.email)
+
+    async def on_after_reset_password(self, user: User, request: Request | None = None) -> None:
+        # Already True by the time this fires (forgot_password() above
+        # only ever generates a token when it was) - set again anyway as
+        # a cheap defensive backstop rather than relying on that
+        # invariant never drifting.
+        await self.user_db.update(user, {"has_password": True})
+        logger.info("Password reset completed for %s", user.email)
 
     async def validate_password(self, password: str, user: UserCreate | User) -> None:
         """fastapi-users applies no strength requirement by default (a
@@ -164,6 +279,40 @@ current_active_user = fastapi_users.current_user(active=True)
 # an endpoint should still work for anyone, but personalize its response
 # for a signed-in engineer (none of databridge's endpoints use this yet).
 current_active_user_optional = fastapi_users.current_user(active=True, optional=True)
+
+
+async def forgot_password_handler(
+    request: Request,
+    email: EmailStr = Body(..., embed=True),
+    user_manager: UserManager = Depends(get_user_manager),
+) -> dict:
+    """Replaces fastapi-users' own POST /auth/forgot-password (main.py
+    swaps this in the same way it swaps rate-limited endpoints and
+    github_authorize_redirect onto their routers below) - same shape as
+    the original (try get_by_email, swallow UserInactive, always
+    succeed), but the response body also reports whether the account is
+    GitHub-OAuth-only, which the library's own route has no way to
+    surface. UserManager.forgot_password() (auth.py above) is what
+    actually withholds the token for such an account; this only decides
+    what the frontend gets told about *why* nothing arrived, and never
+    generates or leaks anything the underlying flow wouldn't have.
+
+    A nonexistent email and a GitHub-only one both still get the same
+    "no email, no token" outcome underneath - only the reported
+    oauth_only distinguishes them, and that's a deliberate, narrower
+    tradeoff than the fully generic 202 fastapi-users ships with (see
+    UserManager.forgot_password()'s docstring)."""
+    try:
+        user = await user_manager.get_by_email(email)
+    except fastapi_users_exceptions.UserNotExists:
+        return {"oauth_only": False}
+
+    oauth_only = not user.has_password
+    try:
+        await user_manager.forgot_password(user, request)
+    except fastapi_users_exceptions.UserInactive:
+        pass
+    return {"oauth_only": oauth_only}
 
 
 def get_github_oauth_client() -> GitHubOAuth2 | None:

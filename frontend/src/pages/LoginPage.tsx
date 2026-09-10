@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { githubAuthorizeUrl, ApiError } from "../api/client";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -8,6 +8,11 @@ import { ThemeToggle } from "../components/ThemeToggle";
 export function LoginPage() {
   const { loginWithPassword } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Set by ResetPasswordPage's navigate() after a successful reset - state
+  // rather than a query param so it can't be bookmarked/shared and shown
+  // to someone who didn't just reset anything.
+  const justReset = Boolean((location.state as { passwordReset?: boolean } | null)?.passwordReset);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +41,12 @@ export function LoginPage() {
         <h1 className="text-2xl font-semibold tracking-tight mb-1">Sign in</h1>
         <p className="text-muted-foreground mb-8 text-sm">Access your ingested client records.</p>
 
+        {justReset && (
+          <p className="mb-6 text-sm text-primary">
+            Password reset. Sign in with your new password.
+          </p>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1" htmlFor="email">
@@ -52,9 +63,14 @@ export function LoginPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1" htmlFor="password">
-              Password
-            </label>
+            <div className="flex items-baseline justify-between mb-1">
+              <label className="block text-sm font-medium" htmlFor="password">
+                Password
+              </label>
+              <Link to="/forgot-password" className="text-xs text-ring hover:underline">
+                Forgot password?
+              </Link>
+            </div>
             <input
               id="password"
               type="password"

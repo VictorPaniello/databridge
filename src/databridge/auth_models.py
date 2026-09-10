@@ -11,7 +11,7 @@ import uuid
 
 from fastapi_users.db import SQLAlchemyBaseOAuthAccountTableUUID, SQLAlchemyBaseUserTableUUID
 from fastapi_users_db_sqlalchemy.generics import GUID
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from databridge.db import Base
@@ -46,5 +46,15 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
+    # hashed_password (inherited from the mixin) is never NULL - a GitHub-
+    # OAuth-only signup gets a random, nobody-knows-it hash there too (see
+    # fastapi_users' BaseUserManager.oauth_callback), so that column alone
+    # can't tell a real, user-chosen password apart from that placeholder.
+    # This flag is what auth.py's UserManager maintains explicitly (set on
+    # email+password registration and on any password change/reset) so
+    # /auth/forgot-password can refuse to issue a reset token - and
+    # therefore a real password - to an account nobody ever put one on.
+    has_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship("OAuthAccount", lazy="joined")

@@ -87,5 +87,17 @@ class Settings(BaseSettings):
     the volume doesn't grow forever - not a substitute for actual
     point-in-time recovery, just bounding how much history is kept."""
 
+    resend_api_key: str | None = None
+    """Resend (resend.dev) API key, used by auth.py's UserManager to send
+    forgot-password emails. None disables real delivery - the reset link
+    is logged instead (see on_after_forgot_password), which is fine for
+    local dev but must be set in production or nobody can actually receive
+    a reset link."""
+    email_from: str = "databridge <onboarding@resend.dev>"
+    """Resend's shared onboarding@resend.dev sender - delivers to any
+    recipient without verifying a custom sending domain first, which is
+    all this project's scale needs. Swap for a verified domain address if
+    this ever needs a branded From name."""
+
 
 settings = Settings()

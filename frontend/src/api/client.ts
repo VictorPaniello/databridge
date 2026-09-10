@@ -139,6 +139,37 @@ export async function logout(): Promise<void> {
   await request<void>("/auth/jwt/logout", { method: "POST" });
 }
 
+// Always resolves 202 regardless of whether the email is registered -
+// anti-enumeration by design, see auth.py. The one exception is
+// oauth_only: true, which does confirm the account exists (and is
+// GitHub-only) - a deliberate, narrower tradeoff than a fully generic
+// response, made so the page can tell someone "sign in with GitHub"
+// instead of leaving them waiting on an email that will never arrive
+// (see auth.py's UserManager.forgot_password()/forgot_password_handler
+// for the backend side of why no email is sent in that case).
+export async function forgotPassword(email: string): Promise<{ oauthOnly: boolean }> {
+  const { oauth_only } = await request<{ oauth_only: boolean }>("/auth/forgot-password", {
+    method: "POST",
+    auth: false,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return { oauthOnly: oauth_only };
+}
+
+// Throws ApiError with a readable message on an invalid/expired token
+// (RESET_PASSWORD_BAD_TOKEN) or a password that fails the same strength
+// rules registration enforces (RESET_PASSWORD_INVALID_PASSWORD, whose
+// `reason` extractErrorMessage already surfaces).
+export async function resetPassword(token: string, password: string): Promise<void> {
+  await request<void>("/auth/reset-password", {
+    method: "POST",
+    auth: false,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, password }),
+  });
+}
+
 export async function getCurrentUser(): Promise<CurrentUser> {
   return request<CurrentUser>("/users/me");
 }
