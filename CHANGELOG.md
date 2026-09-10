@@ -56,6 +56,27 @@ nothing has been tagged as a release yet, so everything below is under
   consent screen → `/callback` → a real user created and a bearer token
   returned → that token authenticated against `/users/me`.
 
+### Security
+- **`JWT_SECRET` was never set in Railway** - production was signing every
+  login token with the obviously-fake default from `config.py`
+  (`insecure-local-dev-secret-do-not-use-in-production`), which is right
+  there in the source. Confirmed exploitable, not just theoretical: forged
+  a JWT for a real user with that known default and it authenticated
+  successfully against the live `/users/me`. Fixed by generating a real
+  random secret and setting it in Railway - re-verified afterwards that
+  the forged token now gets 401 and a fresh real login still works. Found
+  by a deliberate security review, not by a user report.
+- Registration accepts a one-character password - `UserManager` doesn't
+  override `validate_password`, so fastapi-users applies no minimum
+  strength requirement. Not yet fixed - tracked in "What it doesn't do
+  (yet)".
+- No rate limiting on `/auth/jwt/login` or `/auth/register` - brute-force
+  and credential-stuffing are currently unthrottled. Not yet fixed -
+  tracked in "What it doesn't do (yet)".
+- No file size limit on `/records/upload` - an oversized file is read
+  fully into memory before tidycsv/pandas ever sees it. Not yet fixed -
+  tracked in "What it doesn't do (yet)".
+
 ### Fixed (deployment, continued)
 - `GET /records` returned 500 (`psycopg.errors.UndefinedColumn: column
   client_records.owner_id does not exist`) against the live Railway
