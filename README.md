@@ -43,6 +43,7 @@ company/client parameter, but because each `ClientRecord` has an
 | `GET` | `/records` | List **your own** records, optionally `?has_issues=true/false` |
 | `GET` | `/records/{id}` | Fetch one of **your own** records - 404 (not 403) if it belongs to someone else, or doesn't exist |
 | `GET` | `/records/{id}/webhooks` | Audit log of webhook delivery attempts for one of your own records |
+| `DELETE` | `/records/{id}` | Permanently erase one of your own records (and its webhook delivery history) - the GDPR right-to-erasure endpoint |
 
 Re-uploading a file already ingested (matched by email, scoped to the
 uploading engineer) is a no-op, not a duplicate insert or an error - two

@@ -57,6 +57,21 @@ nothing has been tagged as a release yet, so everything below is under
   returned → that token authenticated against `/users/me`.
 
 ### Security
+- **No way to actually delete a client's data.** From a reliability/trust
+  review (this project handles real client PII - name, email, phone):
+  there was no deletion endpoint at all, so honoring a GDPR
+  right-to-erasure request was impossible via the API. Added
+  `DELETE /records/{id}`: a real delete, not a soft-delete flag, scoped
+  to the caller's own records (404, not 403, for someone else's - same
+  as every other `/records/{id}*` endpoint). `WebhookDelivery.record_id`'s
+  foreign key now has `ON DELETE CASCADE` (new migration
+  `9d13056a9c48`), so a record's delivery audit trail is erased with it
+  rather than left as orphaned rows still carrying the erased record's
+  id. Verified with real tests: deleting a record makes it a genuine 404
+  afterwards (not a "deleted" flag still showing up), its webhook
+  deliveries are actually gone from the table (not just hidden), and
+  another engineer's delete attempt on your record 404s and leaves it
+  untouched.
 - **Webhooks sent the raw `WEBHOOK_SECRET` as a header value
   (`X-Databridge-Secret`) on every delivery**, instead of only ever using
   it locally to prove authenticity - weaker than necessary, and gave a
