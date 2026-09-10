@@ -6,6 +6,7 @@ dashboard. Either way, the application code never sees a literal secret."""
 
 from __future__ import annotations
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +14,24 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/databridge"
+
+    @field_validator("database_url")
+    @classmethod
+    def _use_psycopg3_driver(cls, v: str) -> str:
+        """Railway (and most hosts) inject DATABASE_URL as
+        postgres://... or postgresql://..., the libpq-style scheme with no
+        driver specified. SQLAlchemy then defaults to psycopg2, which isn't
+        installed here (this project uses psycopg3, `psycopg[binary]`) and
+        would fail with a ModuleNotFoundError - not the Connection refused
+        error this was written to fix, but the next thing that would break
+        once that one is. Rewriting the scheme here means the same env var
+        works locally, in CI, and on any host, regardless of which scheme
+        prefix it hands us."""
+        if v.startswith("postgres://"):
+            return "postgresql+psycopg://" + v[len("postgres://") :]
+        if v.startswith("postgresql://"):
+            return "postgresql+psycopg://" + v[len("postgresql://") :]
+        return v
     webhook_url: str | None = None
     """Where to POST a notification when a new record is ingested. If unset,
     webhook delivery is skipped entirely (logged, not silently dropped)."""
