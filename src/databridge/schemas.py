@@ -40,6 +40,20 @@ class WebhookDeliveryOut(BaseModel):
     attempted_at: datetime
 
 
+class WebhookJobStatusOut(BaseModel):
+    """The automatic (post-ingest) delivery pipeline's current state for
+    one record - distinct from the per-attempt history
+    GET /records/{id}/webhooks returns. "not_configured" when no
+    WEBHOOK_URL is set at all (mirrors enqueue_delivery()'s no-op in that
+    case) rather than pretending a job exists that was never created.
+    Doesn't reflect manual replays - those are a deliberate one-off
+    action outside this pipeline (see notify_new_record()'s docstring)."""
+
+    status: str  # "pending" | "done" | "dead" | "not_configured"
+    attempt_number: int | None
+    available_at: datetime | None
+
+
 class IngestResult(BaseModel):
     ingestion_run_id: uuid.UUID
     rows_total: int

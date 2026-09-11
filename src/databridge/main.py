@@ -35,7 +35,7 @@ from databridge.auth_models import User
 from databridge.config import settings
 from databridge.db import get_db
 from databridge.ingest import ingest_file, load_schema
-from databridge.models import ClientRecord, IngestionRun, WebhookDelivery
+from databridge.models import ClientRecord, IngestionRun, WebhookDelivery, WebhookJob
 from databridge.schemas import (
     ClientRecordOut,
     IngestionRunOut,
@@ -43,6 +43,7 @@ from databridge.schemas import (
     IngestResult,
     RecordsPage,
     WebhookDeliveryOut,
+    WebhookJobStatusOut,
 )
 from databridge.webhooks import notify_new_record
 
@@ -366,6 +367,25 @@ def get_record_webhooks(
         .order_by(WebhookDelivery.attempted_at, WebhookDelivery.id)
     )
     return db.execute(query).scalars().all()
+
+
+@app.get("/records/{record_id}/webhook-status", response_model=WebhookJobStatusOut)
+def get_record_webhook_status(
+    record_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_active_user),
+) -> WebhookJobStatusOut:
+    """The automatic post-ingest delivery pipeline's current state for one
+    record - see WebhookJobStatusOut's docstring for what each status
+    means."""
+    _get_owned_record(db, record_id, user)
+    job_query = select(WebhookJob).where(WebhookJob.record_id == record_id)
+    job = db.execute(job_query).scalar_one_or_none()
+    if job is None:
+        return WebhookJobStatusOut(status="not_configured", attempt_number=None, available_at=None)
+    return WebhookJobStatusOut(
+        status=job.status, attempt_number=job.attempt_number, available_at=job.available_at
+    )
 
 
 @app.post("/records/{record_id}/webhooks/replay", response_model=WebhookDeliveryOut)
