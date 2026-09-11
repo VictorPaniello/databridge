@@ -5,6 +5,7 @@ import { ApiError } from "../api/client";
 import type { ClientRecord, WebhookDelivery, WebhookJobStatus } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { CopyButton } from "../components/CopyButton";
+import { Spinner } from "../components/Spinner";
 
 export function RecordDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -63,7 +64,12 @@ export function RecordDetailPage() {
     }
   }
 
-  if (loading) return <p className="text-muted-foreground text-sm">Loading…</p>;
+  if (loading)
+    return (
+      <p className="flex items-center gap-2 text-muted-foreground text-sm">
+        <Spinner /> Loading…
+      </p>
+    );
   if (error) return <p className="text-red-600 text-sm">{error}</p>;
   if (!record) return null;
 

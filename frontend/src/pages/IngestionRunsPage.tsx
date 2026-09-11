@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import * as api from "../api/client";
 import { ApiError } from "../api/client";
 import type { IngestionRun } from "../api/types";
+import { Spinner } from "../components/Spinner";
 
 export function IngestionRunsPage() {
   const [runs, setRuns] = useState<IngestionRun[]>([]);
@@ -36,7 +37,9 @@ export function IngestionRunsPage() {
       </p>
 
       {loading ? (
-        <p className="text-muted-foreground text-sm">Loading…</p>
+        <p className="flex items-center gap-2 text-muted-foreground text-sm">
+          <Spinner /> Loading…
+        </p>
       ) : error ? (
         <p className="text-red-600 text-sm">{error}</p>
       ) : runs.length === 0 ? (

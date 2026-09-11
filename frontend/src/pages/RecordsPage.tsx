@@ -6,6 +6,7 @@ import type { ClientRecord, IngestResult } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { greeting } from "../lib/greeting";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { Spinner } from "../components/Spinner";
 
 type Filter = "all" | "clean" | "flagged";
 
@@ -254,6 +255,13 @@ export function RecordsPage() {
         </div>
       </div>
 
+      {uploading && (
+        <div className="mb-4 flex items-center gap-2 rounded-md border border-border bg-secondary/50 px-4 py-3 text-sm text-muted-foreground">
+          <Spinner />
+          Cleaning and importing your file - this can take a moment for larger uploads.
+        </div>
+      )}
+
       {exportError && (
         <div className="mb-4 rounded-md border border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-900 px-4 py-3 text-sm text-red-700 dark:text-red-300">
           {exportError}
@@ -353,7 +361,9 @@ export function RecordsPage() {
       </div>
 
       {loading ? (
-        <p className="text-muted-foreground text-sm">Loading…</p>
+        <p className="flex items-center gap-2 text-muted-foreground text-sm">
+          <Spinner /> Loading…
+        </p>
       ) : error ? (
         <p className="text-red-600 text-sm">{error}</p>
       ) : records.length === 0 ? (
