@@ -40,6 +40,56 @@ MIN_PASSWORD_LENGTH = 8
 logger = logging.getLogger(__name__)
 
 
+def _email_layout(
+    preheader: str, heading: str, intro_html: str, cta_text: str, cta_url: str, note_html: str
+) -> str:
+    """Shared HTML wrapper for every account-security email this app
+    sends: wordmark banner, a styled button, and a footer - built once
+    so on_after_forgot_password (and any future one, e.g. email
+    verification) don't each hand-roll their own markup. Table layout +
+    inline styles only, no external CSS or images: that's what actually
+    survives Gmail/Outlook's HTML sanitizing, not a style choice.
+
+    Lines are wrapped mid-tag (harmless - HTML doesn't care about
+    whitespace between attributes) to stay under this file's line-length
+    limit without resorting to noqa comments."""
+    return f"""\
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f5f5f4;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<span style="display:none;max-height:0;overflow:hidden;">{preheader}</span>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+    style="background:#f5f5f4;padding:40px 16px;">
+<tr><td align="center">
+<table role="presentation" width="480" cellpadding="0" cellspacing="0"
+    style="max-width:480px;width:100%;background:#ffffff;border-radius:12px;
+    border:1px solid #e7e5e4;">
+<tr><td style="padding:32px 32px 24px;text-align:center;border-bottom:1px solid #f5f5f4;">
+<span style="font-size:24px;font-weight:700;color:#1c1917;">tidy<span
+    style="color:#059669;">bridge</span></span>
+</td></tr>
+<tr><td style="padding:32px;">
+<h1 style="margin:0 0 16px;font-size:20px;color:#1c1917;">{heading}</h1>
+<div style="font-size:15px;line-height:1.6;color:#44403c;">{intro_html}</div>
+<div style="text-align:center;margin:28px 0 4px;">
+<a href="{cta_url}" style="display:inline-block;background:#059669;color:#ffffff;
+    font-weight:600;font-size:15px;text-decoration:none;padding:12px 28px;
+    border-radius:8px;">{cta_text}</a>
+</div>
+<p style="margin:20px 0 0;font-size:13px;line-height:1.5;color:#78716c;">{note_html}</p>
+</td></tr>
+<tr><td style="padding:20px 32px 32px;border-top:1px solid #f5f5f4;">
+<p style="margin:0;font-size:13px;color:#a8a29e;">tidybridge &middot; client data
+    ingestion service</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>"""
+
+
 async def _send_email(to: str, subject: str, html: str) -> None:
     """Used by UserManager.on_after_forgot_password below. None of it
     ever propagates as an exception: a failed send shouldn't turn
@@ -170,12 +220,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         await _send_email(
             user.email,
             "Reset your tidybridge password",
-            "<p>Someone requested a password reset for your tidybridge "
-            "account.</p>"
-            f'<p><a href="{reset_url}">Reset your password</a></p>'
-            "<p>This link expires in 1 hour and can only be used once. If "
-            "you didn't request this, you can safely ignore this email - "
-            "your password hasn't changed.</p>",
+            _email_layout(
+                preheader="Reset your tidybridge password",
+                heading="Reset your password",
+                intro_html="<p>Someone requested a password reset for your tidybridge account.</p>",
+                cta_text="Reset your password",
+                cta_url=reset_url,
+                note_html="This link expires in 1 hour and can only be used once. If you "
+                "didn't request this, you can safely ignore this email - your "
+                "password hasn't changed.",
+            ),
         )
 
     async def on_after_reset_password(self, user: User, request: Request | None = None) -> None:
