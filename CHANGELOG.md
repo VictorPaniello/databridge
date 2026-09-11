@@ -161,6 +161,11 @@ nothing has been tagged as a release yet, so everything below is under
   requires a byte-exact lockfile match and would fail against a
   not-yet-regenerated one) - switching back to `ci` is worth doing once
   the lockfile has gone through one real `npm install`.
+
+  **Resolved**: a real Node.js/npm became available in this dev
+  environment afterward; ran a real `npm install` (regenerating
+  `package-lock.json` for real, `npm audit` and all) and switched CI's
+  frontend job back to `npm ci`.
 - **Webhook delivery retries.** `notify_new_record()` used to make a
   single best-effort POST - a receiver's brief outage (a deploy, a cold
   start, a transient 5xx) meant the notification was simply lost, logged

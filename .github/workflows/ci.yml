@@ -58,15 +58,12 @@ jobs:
         with:
           node-version: "20"
 
-      # `npm install`, not `npm ci`: package-lock.json wasn't regenerated
-      # against a real npm install when vitest/@testing-library were
-      # added (only verified locally via bun, in a dev environment with
-      # no Node.js/npm available - see CHANGELOG) - `ci` requires a
-      # byte-exact lockfile match and would fail on that mismatch, while
-      # `install` reconciles it. Worth switching back to `ci` once the
-      # lockfile has gone through one real `npm install`.
+      # package-lock.json has now gone through a real `npm install` (a
+      # real Node/npm became available in the dev environment - see
+      # CHANGELOG), so `ci` (byte-exact lockfile match, faster and more
+      # reproducible than `install`) is safe to use again.
       - name: Install
-        run: npm install
+        run: npm ci
 
       - name: Lint
         run: npm run lint

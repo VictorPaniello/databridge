@@ -579,6 +579,22 @@ Found via a deliberate review, not a user report:
   be used to self-promote to `is_superuser` - fastapi-users' safe-update
   default already strips that field, confirmed by actually trying it.
 
+- **Known, currently unpatched: `react-router-dom` 6.30.6 (the latest
+  6.x release - there is no patched 6.x) carries a moderate-severity
+  open-redirect advisory** (`GHSA-wrjc-x8rr-h8h6` - a backslash-prefixed
+  value passed to `<Link>`/`useNavigate` can be parsed as
+  protocol-relative and redirect off-site). Checked this app's actual
+  exposure rather than assuming the CVE applies as shipped: every
+  `navigate()`/`<Link to=` call in the frontend uses a hardcoded literal
+  path or a template built from this app's own IDs (`/records/${id}`,
+  `/?ingestion_run_id=${run.id}`) - nowhere does user- or
+  attacker-controlled input reach a navigation target directly, so the
+  specific exploit vector isn't reachable through this app's own code as
+  written. The dependency itself is still vulnerable, though, and the
+  real fix (upgrading to React Router v7, a breaking major version) is a
+  deliberate migration worth doing on its own, not a drive-by dependency
+  bump - not done in this pass.
+
 ## License
 
 MIT
