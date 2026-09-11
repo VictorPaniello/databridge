@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 import { parsePhone } from "../lib/phone";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { PasswordInput } from "../components/PasswordInput";
 import { PhoneInput } from "../components/PhoneInput";
 import { PasswordRulesList } from "../components/PasswordRulesList";
 
@@ -179,13 +180,11 @@ export function SettingsPage() {
             <label className="block text-sm font-medium mb-1" htmlFor="new-password">
               New password
             </label>
-            <input
+            <PasswordInput
               id="new-password"
-              type="password"
               autoComplete="new-password"
               value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-ring"
+              onChange={setNewPassword}
             />
             {newPassword && <PasswordRulesList password={newPassword} />}
           </div>
@@ -194,13 +193,11 @@ export function SettingsPage() {
             <label className="block text-sm font-medium mb-1" htmlFor="confirm-password">
               Confirm new password
             </label>
-            <input
+            <PasswordInput
               id="confirm-password"
-              type="password"
               autoComplete="new-password"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-ring"
+              onChange={setConfirmPassword}
             />
           </div>
 
