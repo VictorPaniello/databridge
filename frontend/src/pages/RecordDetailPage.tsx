@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import * as api from "../api/client";
 import { ApiError } from "../api/client";
-import type { ClientRecord, WebhookDelivery } from "../api/types";
+import type { ClientRecord, WebhookDelivery, WebhookJobStatus } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 
 export function RecordDetailPage() {
@@ -10,6 +10,7 @@ export function RecordDetailPage() {
   const navigate = useNavigate();
   const [record, setRecord] = useState<ClientRecord | null>(null);
   const [webhooks, setWebhooks] = useState<WebhookDelivery[]>([]);
+  const [webhookStatus, setWebhookStatus] = useState<WebhookJobStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -20,10 +21,11 @@ export function RecordDetailPage() {
     if (!id) return;
     setLoading(true);
     setError(null);
-    Promise.all([api.getRecord(id), api.getRecordWebhooks(id)])
-      .then(([recordResult, webhooksResult]) => {
+    Promise.all([api.getRecord(id), api.getRecordWebhooks(id), api.getRecordWebhookStatus(id)])
+      .then(([recordResult, webhooksResult, statusResult]) => {
         setRecord(recordResult);
         setWebhooks(webhooksResult);
+        setWebhookStatus(statusResult);
       })
       .catch((err) => {
         setError(
@@ -106,7 +108,10 @@ export function RecordDetailPage() {
 
       <div className="mt-8">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold">Webhook deliveries</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold">Webhook deliveries</h2>
+            <WebhookStatusBadge status={webhookStatus} />
+          </div>
           <button
             type="button"
             onClick={handleReplay}
@@ -178,5 +183,36 @@ function Field({ label, value }: { label: string; value: string | null }) {
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="font-medium">{value ?? "—"}</dd>
     </div>
+  );
+}
+
+// The automatic post-ingest delivery pipeline's state, next to the
+// "Webhook deliveries" heading - distinct from the per-attempt table
+// below it, and from a manual replay (which this never reflects, see
+// WebhookJobStatus's docstring in api/types.ts).
+function WebhookStatusBadge({ status }: { status: WebhookJobStatus | null }) {
+  if (!status || status.status === "not_configured") return null;
+
+  if (status.status === "dead") {
+    return (
+      <span className="rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400 px-2 py-0.5 text-xs">
+        Delivery failed permanently
+      </span>
+    );
+  }
+  if (status.status === "done") {
+    return (
+      <span className="rounded-full bg-accent text-accent-foreground px-2 py-0.5 text-xs">
+        Delivered
+      </span>
+    );
+  }
+  // "pending"
+  return (
+    <span className="rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400 px-2 py-0.5 text-xs">
+      {status.attempt_number && status.attempt_number > 1
+        ? `Retrying (attempt ${status.attempt_number})`
+        : "Delivery pending"}
+    </span>
   );
 }

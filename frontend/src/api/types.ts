@@ -79,6 +79,15 @@ export interface RecordsPage {
   offset: number;
 }
 
+// The automatic (post-ingest) delivery pipeline's current state for one
+// record - see the backend's WebhookJobStatusOut docstring for what each
+// status means. Doesn't reflect manual replays.
+export interface WebhookJobStatus {
+  status: "pending" | "done" | "dead" | "not_configured";
+  attempt_number: number | null;
+  available_at: string | null;
+}
+
 export interface CurrentUser {
   id: string;
   email: string;
