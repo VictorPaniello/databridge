@@ -3,10 +3,10 @@ import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
-import { COUNTRY_CODES } from "../data/countryCodes";
 import { parsePhone } from "../lib/phone";
-import { PASSWORD_RULES } from "../lib/passwordRules";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { PhoneInput } from "../components/PhoneInput";
+import { PasswordRulesList } from "../components/PasswordRulesList";
 
 export function SettingsPage() {
   const { user, updateProfile, deleteAccount } = useAuth();
@@ -148,38 +148,12 @@ export function SettingsPage() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1" htmlFor="phone">
-              Phone <span className="text-muted-foreground font-normal">(optional)</span>
-            </label>
-            <div className="flex gap-2">
-              <select
-                id="phone-country"
-                aria-label="Country code"
-                value={dialCode}
-                onChange={(e) => setDialCode(e.target.value)}
-                className="w-28 shrink-0 rounded-md border border-input bg-background text-foreground px-2 py-2 outline-none focus:ring-2 focus:ring-ring"
-              >
-                {COUNTRY_CODES.map((c) => (
-                  <option
-                    key={c.iso2}
-                    value={c.dialCode}
-                    style={{ backgroundColor: "var(--background)", color: "var(--foreground)" }}
-                  >
-                    {c.iso2} {c.dialCode}
-                  </option>
-                ))}
-              </select>
-              <input
-                id="phone"
-                type="tel"
-                autoComplete="tel-national"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                className="w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-          </div>
+          <PhoneInput
+            dialCode={dialCode}
+            phoneNumber={phoneNumber}
+            onDialCodeChange={setDialCode}
+            onPhoneNumberChange={setPhoneNumber}
+          />
 
           {error && <p className="text-sm text-red-600">{error}</p>}
           {saved && !error && <p className="text-sm text-primary">Saved.</p>}
@@ -213,19 +187,7 @@ export function SettingsPage() {
               onChange={(e) => setNewPassword(e.target.value)}
               className="w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-ring"
             />
-            {newPassword && (
-              <ul className="mt-2 space-y-0.5 text-xs" aria-live="polite">
-                {PASSWORD_RULES.map((rule) => {
-                  const met = rule.test(newPassword);
-                  return (
-                    <li key={rule.label} className={met ? "text-primary" : "text-muted-foreground"}>
-                      <span aria-hidden="true">{met ? "✓" : "○"}</span> {rule.label}
-                      <span className="sr-only">{met ? " - met" : " - not met yet"}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            {newPassword && <PasswordRulesList password={newPassword} />}
           </div>
 
           <div>
