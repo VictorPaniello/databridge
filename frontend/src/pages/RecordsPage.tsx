@@ -233,7 +233,7 @@ export function RecordsPage() {
         <div className="flex gap-2">
           <button
             onClick={handleExport}
-            disabled={exporting || records.length === 0}
+            disabled={exporting || uploading || records.length === 0}
             className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-secondary transition disabled:opacity-50"
           >
             {exporting ? "Exporting…" : "Export CSV"}
@@ -256,8 +256,8 @@ export function RecordsPage() {
       </div>
 
       {uploading && (
-        <div className="mb-4 flex items-center gap-2 rounded-md border border-border bg-secondary/50 px-4 py-3 text-sm text-muted-foreground">
-          <Spinner />
+        <div className="mb-4 flex items-center gap-3 rounded-md border border-border bg-secondary/50 px-4 py-3 text-sm text-foreground">
+          <Spinner className="w-6 h-6 shrink-0" />
           Cleaning and importing your file - this can take a moment for larger uploads.
         </div>
       )}
@@ -341,7 +341,8 @@ export function RecordsPage() {
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`rounded-full px-3 py-1 border transition ${
+              disabled={uploading}
+              className={`rounded-full px-3 py-1 border transition disabled:opacity-50 ${
                 filter === f
                   ? "bg-primary text-primary-foreground border-primary"
                   : "border-border hover:bg-secondary"
@@ -355,8 +356,9 @@ export function RecordsPage() {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          disabled={uploading}
           placeholder="Search by name or email…"
-          className="ml-auto w-full sm:w-64 rounded-md border border-input bg-transparent px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+          className="ml-auto w-full sm:w-64 rounded-md border border-input bg-transparent px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
         />
       </div>
 
