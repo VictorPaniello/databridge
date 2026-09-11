@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { resetPassword, ApiError } from "../api/client";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { PasswordInput } from "../components/PasswordInput";
 import { PasswordRulesList } from "../components/PasswordRulesList";
 
 export function ResetPasswordPage() {
@@ -68,14 +69,12 @@ export function ResetPasswordPage() {
               <label className="block text-sm font-medium mb-1" htmlFor="password">
                 New password
               </label>
-              <input
+              <PasswordInput
                 id="password"
-                type="password"
                 required
                 autoComplete="new-password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-ring"
+                onChange={setPassword}
               />
               {password && <PasswordRulesList password={password} />}
             </div>
@@ -84,14 +83,12 @@ export function ResetPasswordPage() {
               <label className="block text-sm font-medium mb-1" htmlFor="confirm-password">
                 Confirm new password
               </label>
-              <input
+              <PasswordInput
                 id="confirm-password"
-                type="password"
                 required
                 autoComplete="new-password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-ring"
+                onChange={setConfirmPassword}
               />
             </div>
 

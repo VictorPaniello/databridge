@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { PasswordInput } from "../components/PasswordInput";
 import { PhoneInput } from "../components/PhoneInput";
 import { PasswordRulesList } from "../components/PasswordRulesList";
 import { COUNTRY_CODES } from "../data/countryCodes";
@@ -102,14 +103,12 @@ export function RegisterPage() {
             <label className="block text-sm font-medium mb-1" htmlFor="password">
               Password
             </label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               required
               autoComplete="new-password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-ring"
+              onChange={setPassword}
             />
             <PasswordRulesList password={password} />
           </div>
