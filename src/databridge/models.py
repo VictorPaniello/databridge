@@ -28,8 +28,12 @@ class IngestionRun(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     owner_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="cascade"), nullable=False, index=True
     )
+    """ondelete="cascade": deleting a User (DELETE /users/me - the account
+    self-erasure endpoint, main.py) removes every ingestion run they own
+    along with it, rather than leaving orphaned rows or failing the
+    deletion outright on the FK."""
     source_file: Mapped[str] = mapped_column(String, nullable=False)
     rows_total: Mapped[int] = mapped_column(Integer, nullable=False)
     rows_clean: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -58,22 +62,31 @@ class ClientRecord(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="cascade"), nullable=True, index=True
     )
     """Which engineer this client record belongs to - the basis for each
     engineer only seeing their own clients. Nullable because records
     ingested before authentication existed have no owner; a record with no
     owner is visible to nobody rather than to everybody, which is the safer
-    failure direction for client data."""
+    failure direction for client data. ondelete="cascade": deleting a User
+    (DELETE /users/me) removes every client record they own along with
+    it - real, full erasure of an account and everything tied to it, not
+    just the account row itself."""
     ingestion_run_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("ingestion_runs.id"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("ingestion_runs.id", ondelete="cascade"),
+        nullable=True,
+        index=True,
     )
     """Which upload created this record - lets a caller go from "this run
     had 3 flagged rows" (IngestionRun) to "show me exactly those rows"
     (GET /records?ingestion_run_id=...) instead of only having per-record
     has_issues/issues with no way to group them by the upload that
     produced them. Nullable for the same reason owner_id is: every record
-    that predates this column has no run to point at."""
+    that predates this column has no run to point at. ondelete="cascade"
+    so a record can never outlive the run that created it, whichever of
+    the two cascade paths (this one, or its own owner_id above) a User
+    deletion happens to take first."""
     ingestion_run: Mapped[IngestionRun | None] = relationship(back_populates="records")
     source_file: Mapped[str] = mapped_column(String, nullable=False)
     full_name: Mapped[str | None] = mapped_column(String, nullable=True)

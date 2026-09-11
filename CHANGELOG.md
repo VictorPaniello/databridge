@@ -28,6 +28,29 @@ nothing has been tagged as a release yet, so everything below is under
   translated). Softened `DELETE /records/{id}`'s README description from
   "the GDPR right-to-erasure endpoint" (an overreaching claim - GDPR
   compliance isn't one endpoint) to "supports the GDPR right to erasure."
+- **Self-service account deletion.** `DELETE /users/me` - previously
+  there was no way for an engineer to erase their own account, only
+  individual client records (`DELETE /records/{id}`); a GDPR erasure
+  request for the account itself would have needed a manual, out-of-band
+  process. Real, permanent deletion via `ON DELETE CASCADE` at the
+  database level (migration `e986a7123298`, adding cascade to three FKs
+  that pointed at `users.id`/`ingestion_runs.id` with no cascade at all
+  before this) - one `DELETE FROM users` removes every client record,
+  ingestion run, and webhook delivery the account owns, plus any linked
+  GitHub OAuth account, in one atomic operation, not an application-code
+  loop deleting each table by hand. fastapi-users' own `DELETE
+  /users/{id}` is superuser-only (an admin deleting someone else's
+  account); this is a genuinely new self-service route, registered
+  *before* that generic router so the literal path `/users/me` can't be
+  shadowed by its parameterized `/{id}` - the same class of routing bug
+  this project already hit once with `PATCH /users/me` (see "Bugs found
+  while building this" in the README). The bearer token used to
+  authenticate the deletion call keeps its own signature valid
+  afterward (JWTs are stateless, there's no server-side session to
+  revoke) but self-invalidates on its very next use, once
+  `current_active_user` looks up a user id that no longer exists.
+  Frontend: a "Danger zone" section on Account settings, behind the same
+  `ConfirmDialog` pattern the records list already uses for delete.
 - **Persisted ingestion runs.** Before this, the only record of what an
   upload actually did was `IngestResult` - the HTTP response, gone the
   moment it wasn't being looked at (a closed tab, a script that didn't

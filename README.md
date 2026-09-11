@@ -39,6 +39,7 @@ company/client parameter, but because each `ClientRecord` has an
 | `POST` | `/auth/jwt/login` | Log in, get back a bearer token |
 | `GET` | `/auth/github/authorize` | Start "Sign in with GitHub" (only present if `GITHUB_CLIENT_ID`/`SECRET` are set) |
 | `GET` | `/users/me` | The logged-in engineer's own profile |
+| `DELETE` | `/users/me` | Permanently erase **your own** account and everything it owns (client records, ingestion runs, webhook deliveries, linked OAuth account) - real self-service GDPR erasure, not a request queue |
 | `POST` | `/records/upload` | Upload a CSV/Excel file, clean + persist it (tagged to the caller), fire webhooks for new records - returns an `ingestion_run_id` |
 | `GET` | `/ingestion-runs` | List **your own** past uploads, paginated - the persisted summary of every upload, not just the one the last `IngestResult` response reported |
 | `GET` | `/ingestion-runs/{id}` | Fetch one of **your own** past uploads - 404 (not 403) otherwise |
@@ -519,7 +520,7 @@ project's own code or in actually deploying it:
   automated tests yet, only manual browser verification against a real
   local backend. Better than the zero frontend coverage (and no frontend
   CI at all) this project had before, not yet equivalent to the
-  backend's 69 pytest tests against a real database.
+  backend's 73 pytest tests against a real database.
 
 ## Security
 

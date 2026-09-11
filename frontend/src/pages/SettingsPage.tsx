@@ -1,13 +1,19 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 import { COUNTRY_CODES } from "../data/countryCodes";
 import { parsePhone } from "../lib/phone";
 import { PASSWORD_RULES } from "../lib/passwordRules";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 
 export function SettingsPage() {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, deleteAccount } = useAuth();
+  const navigate = useNavigate();
+  const [confirmingDeleteAccount, setConfirmingDeleteAccount] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   const parsed = parsePhone(user?.phone ?? null);
   const [firstName, setFirstName] = useState(user?.first_name ?? "");
   const [lastName, setLastName] = useState(user?.last_name ?? "");
@@ -26,6 +32,21 @@ export function SettingsPage() {
   const [changingPassword, setChangingPassword] = useState(false);
 
   if (!user) return null;
+
+  async function handleDeleteAccount() {
+    setConfirmingDeleteAccount(false);
+    setDeletingAccount(true);
+    setDeleteAccountError(null);
+    try {
+      await deleteAccount();
+      navigate("/login");
+    } catch (err) {
+      setDeleteAccountError(
+        err instanceof ApiError ? err.message : "Couldn't delete your account. Try again.",
+      );
+      setDeletingAccount(false);
+    }
+  }
 
   async function handleProfileSubmit(e: FormEvent) {
     e.preventDefault();
@@ -160,7 +181,7 @@ export function SettingsPage() {
             </div>
           </div>
 
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && <p className="text-sm text-red-600">{error}</p>}
           {saved && !error && <p className="text-sm text-primary">Saved.</p>}
 
           <button
@@ -193,12 +214,13 @@ export function SettingsPage() {
               className="w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-ring"
             />
             {newPassword && (
-              <ul className="mt-2 space-y-0.5 text-xs">
+              <ul className="mt-2 space-y-0.5 text-xs" aria-live="polite">
                 {PASSWORD_RULES.map((rule) => {
                   const met = rule.test(newPassword);
                   return (
                     <li key={rule.label} className={met ? "text-primary" : "text-muted-foreground"}>
-                      {met ? "✓" : "○"} {rule.label}
+                      <span aria-hidden="true">{met ? "✓" : "○"}</span> {rule.label}
+                      <span className="sr-only">{met ? " - met" : " - not met yet"}</span>
                     </li>
                   );
                 })}
@@ -220,7 +242,7 @@ export function SettingsPage() {
             />
           </div>
 
-          {passwordError && <p className="text-sm text-red-500">{passwordError}</p>}
+          {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
           {passwordSaved && !passwordError && (
             <p className="text-sm text-primary">Password changed.</p>
           )}
@@ -234,6 +256,34 @@ export function SettingsPage() {
           </button>
         </form>
       </div>
+
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight mb-1 text-red-600">Danger zone</h2>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Permanently deletes your account and every client record, upload history entry, and
+          webhook delivery it owns. This cannot be undone.
+        </p>
+
+        {deleteAccountError && <p className="mb-3 text-sm text-red-600">{deleteAccountError}</p>}
+
+        <button
+          type="button"
+          onClick={() => setConfirmingDeleteAccount(true)}
+          disabled={deletingAccount}
+          className="rounded-md border border-red-300 dark:border-red-900 bg-card text-red-600 dark:text-red-400 px-4 py-2 text-sm shadow-sm hover:shadow hover:bg-red-50 dark:hover:bg-red-950/30 transition disabled:opacity-50"
+        >
+          {deletingAccount ? "Deleting…" : "Delete account"}
+        </button>
+      </div>
+
+      <ConfirmDialog
+        open={confirmingDeleteAccount}
+        title="Delete your account?"
+        message="This permanently erases your account and every client record, upload, and webhook delivery it owns. This cannot be undone."
+        confirmLabel="Delete account"
+        onConfirm={handleDeleteAccount}
+        onCancel={() => setConfirmingDeleteAccount(false)}
+      />
     </div>
   );
 }

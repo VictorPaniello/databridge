@@ -210,6 +210,17 @@ export async function updateProfile(input: ProfileUpdate): Promise<CurrentUser> 
   });
 }
 
+// Permanently erases the caller's own account and everything tied to it
+// (every client record, ingestion run, and webhook delivery they own,
+// plus any linked GitHub OAuth account) - see main.py's
+// delete_own_account docstring. Real, irreversible deletion, not a
+// deactivation - AuthContext.deleteAccount() clears the local token
+// right after this resolves, since the token would 401 on its own very
+// next use anyway (the user id it names no longer exists).
+export async function deleteAccount(): Promise<void> {
+  await request<void>("/users/me", { method: "DELETE" });
+}
+
 // Not fetched: this used to be `await fetch("/auth/github/authorize")`
 // then `window.location.href = <the JSON body's authorization_url>`, but
 // that route sets a CSRF cookie the browser needs to send back on the

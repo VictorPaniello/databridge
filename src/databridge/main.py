@@ -11,7 +11,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -129,6 +129,38 @@ for _route in _reset_router.routes:
     elif _route.path == "/reset-password":
         _route.endpoint = limiter.limit(_STRICT_AUTH_LIMIT)(_route.endpoint)
 app.include_router(_reset_router, prefix="/auth", tags=["auth"])
+
+# Registered *before* the generic users router below, and matched on the
+# literal path "/users/me" - fastapi-users' own router already has a
+# DELETE /users/{id}, but it's superuser-only (an admin deleting some
+# other account by id), not a self-service route for a caller to delete
+# their own. Registration order matters here: FastAPI/Starlette matches
+# routes in the order they were added, so this literal "/me" path must
+# be registered first or a parameterized "/{id}" route from the router
+# below would shadow it and try (and fail) to parse "me" as a user id -
+# the exact class of routing-shadow bug this project has hit before with
+# PATCH /users/me (see CHANGELOG/README's Bugs section).
+@app.delete("/users/me", status_code=204)
+def delete_own_account(
+    db: Session = Depends(get_db),
+    user: User = Depends(current_active_user),
+) -> None:
+    """Permanently erase the caller's own account and everything tied to
+    it - every client record, ingestion run, and (via client_records'
+    own further cascade) webhook delivery they own, plus any linked
+    GitHub OAuth account. Real deletion via ON DELETE CASCADE at the
+    database level (migration e986a7123298), the same principle
+    DELETE /records/{id} already uses - not a soft-delete flag some
+    other query could still surface. The bearer token the caller
+    authenticated with keeps its own signature valid (JWTs are
+    stateless - there's no server-side session to revoke), but the very
+    next request made with it 401s the moment current_active_user tries
+    to look the now-deleted user id back up, so it self-invalidates on
+    first use after deletion rather than staying usable.
+    """
+    db.execute(delete(User).where(User.id == user.id))
+    db.commit()
+
 
 app.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate), prefix="/users", tags=["users"]

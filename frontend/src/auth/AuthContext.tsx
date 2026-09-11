@@ -22,6 +22,7 @@ interface AuthState {
   // PATCH /users/me underneath either way.
   updateProfile: (input: ProfileUpdate) => Promise<void>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -82,6 +83,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // No corresponding "logout" call afterward, unlike logout() above -
+  // the account (and the session the JWT names) is already gone server-
+  // side by the time this resolves, so there's nothing left to log out
+  // of, only the local token to drop.
+  const deleteAccount = useCallback(async () => {
+    await api.deleteAccount();
+    api.clearToken();
+    setUser(null);
+  }, []);
+
   const needsProfile = user !== null && !user.first_name;
 
   return (
@@ -95,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         updateProfile,
         logout,
+        deleteAccount,
       }}
     >
       {children}
