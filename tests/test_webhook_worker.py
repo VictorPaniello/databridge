@@ -141,7 +141,9 @@ def test_webhook_status_is_pending_before_the_worker_runs(client: TestClient, mo
     assert response.json()["attempt_number"] == 1
 
 
-def test_webhook_status_is_dead_after_every_attempt_fails(client: TestClient, db: Session, monkeypatch):
+def test_webhook_status_is_dead_after_every_attempt_fails(
+    client: TestClient, db: Session, monkeypatch
+):
     import databridge.webhooks as webhooks_module
 
     monkeypatch.setattr(webhooks_module.settings, "webhook_url", "http://127.0.0.1:1/unused")
