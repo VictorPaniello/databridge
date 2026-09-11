@@ -47,7 +47,7 @@ company/client parameter, but because each `ClientRecord` has an
 | `GET` | `/records/{id}` | Fetch one of **your own** records - 404 (not 403) if it belongs to someone else, or doesn't exist |
 | `GET` | `/records/{id}/webhooks` | Audit log of webhook delivery attempts for one of your own records |
 | `POST` | `/records/{id}/webhooks/replay` | Manually re-send the notification for one of your own records, on demand - 400 if no `WEBHOOK_URL` is configured |
-| `DELETE` | `/records/{id}` | Permanently erase one of your own records (and its webhook delivery history) - supports the GDPR right to erasure, not a standalone claim of full GDPR compliance on its own |
+| `DELETE` | `/records/{id}` | Permanently erase one of your own records (and its webhook delivery history) - supports the GDPR right to erasure, not a standalone claim of full GDPR compliance on its own; see [Privacy Policy](#privacy--terms) |
 
 Re-uploading a file already ingested (matched by email, scoped to the
 uploading engineer) is a no-op, not a duplicate insert or an error - two
@@ -308,6 +308,24 @@ static SPA rather than a long-running process. `VITE_API_URL` is set in
 Vercel's project settings for production; the API's `FRONTEND_URL` env
 var must point back at that same deployed URL for CORS and the OAuth
 redirect to work.
+
+## Privacy & Terms
+
+Real pages, not placeholders - `/privacy` and `/terms` on the deployed
+frontend, linked from the footer on every page and from a required
+consent checkbox at both signup paths (email+password registration and
+GitHub OAuth's complete-profile step). Written from what this specific
+codebase actually does (every data category, third party, and retention
+claim traces back to a real field or endpoint), not adapted from a
+generic template - see `frontend/src/pages/PrivacyPage.tsx` and
+`TermsPage.tsx`. Both pages carry their own disclaimer: good-faith and
+technically accurate, not a substitute for independent legal review.
+
+Data retention is documented exactly as the code behaves: indefinite
+until you delete it yourself (an individual record, or your whole
+account via `DELETE /users/me` above) - there's no automatic expiry.
+Deliberately honest rather than promising a policy that isn't
+implemented.
 
 ## Deployment
 

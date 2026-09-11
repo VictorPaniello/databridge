@@ -12,6 +12,8 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { RecordsPage } from "./pages/RecordsPage";
 import { RecordDetailPage } from "./pages/RecordDetailPage";
 import { IngestionRunsPage } from "./pages/IngestionRunsPage";
+import { PrivacyPage } from "./pages/PrivacyPage";
+import { TermsPage } from "./pages/TermsPage";
 
 export default function App() {
   return (
@@ -23,6 +25,26 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/auth/callback" element={<OAuthCallbackPage />} />
+          {/* Public - readable before signing up, and by anyone the
+              footer links reach, not gated behind ProtectedRoute. Layout
+              itself already renders correctly with no signed-in user
+              (its user-only header links are already conditional). */}
+          <Route
+            path="/privacy"
+            element={
+              <Layout>
+                <PrivacyPage />
+              </Layout>
+            }
+          />
+          <Route
+            path="/terms"
+            element={
+              <Layout>
+                <TermsPage />
+              </Layout>
+            }
+          />
           <Route
             path="/complete-profile"
             element={

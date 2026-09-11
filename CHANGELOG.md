@@ -51,6 +51,18 @@ nothing has been tagged as a release yet, so everything below is under
   `current_active_user` looks up a user id that no longer exists.
   Frontend: a "Danger zone" section on Account settings, behind the same
   `ConfirmDialog` pattern the records list already uses for delete.
+- **Privacy Policy and Terms of Service.** Real pages (`/privacy`,
+  `/terms`), written from what this specific codebase actually does -
+  every data category, third party (GitHub, Resend, Railway, Vercel),
+  and retention claim traces back to a real field or endpoint, not a
+  generic template. Linked from a footer on every page and from a
+  required consent checkbox at both signup paths (email+password
+  registration and GitHub OAuth's complete-profile step) - "form
+  consent" wasn't previously collected anywhere. Both pages carry an
+  explicit disclaimer: good-faith and technically accurate, not a
+  substitute for independent legal review. Also added a footer with a
+  copyright notice and these Privacy/Terms links on every page - there
+  was no footer at all before.
 - **Persisted ingestion runs.** Before this, the only record of what an
   upload actually did was `IngestResult` - the HTTP response, gone the
   moment it wasn't being looked at (a closed tab, a script that didn't

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -18,6 +18,7 @@ export function CompleteProfilePage() {
   const [lastName, setLastName] = useState("");
   const [dialCode, setDialCode] = useState(COUNTRY_CODES[0].dialCode);
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -116,11 +117,33 @@ export function CompleteProfilePage() {
             </div>
           </div>
 
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          <div className="flex items-start gap-2">
+            <input
+              id="agree-terms"
+              type="checkbox"
+              required
+              checked={agreedToTerms}
+              onChange={(e) => setAgreedToTerms(e.target.checked)}
+              className="mt-0.5 size-4 shrink-0 rounded border-input outline-none focus:ring-2 focus:ring-ring"
+            />
+            <label htmlFor="agree-terms" className="text-sm text-muted-foreground">
+              I agree to the{" "}
+              <Link to="/terms" target="_blank" className="text-ring hover:underline">
+                Terms of service
+              </Link>{" "}
+              and{" "}
+              <Link to="/privacy" target="_blank" className="text-ring hover:underline">
+                Privacy policy
+              </Link>
+              , including that any client data I upload is my own to share.
+            </label>
+          </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || !agreedToTerms}
             className="w-full rounded-md bg-primary text-primary-foreground py-2 font-medium hover:opacity-90 transition disabled:opacity-50"
           >
             {submitting ? "Saving…" : "Continue"}

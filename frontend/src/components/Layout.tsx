@@ -48,6 +48,19 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="flex-1 mx-auto w-full max-w-5xl px-4 py-8">{children}</main>
+      <footer className="border-t border-border">
+        <div className="mx-auto max-w-5xl px-4 py-4 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>© {new Date().getFullYear()} Victor Paniello</span>
+          <div className="flex items-center gap-4">
+            <Link to="/privacy" className="hover:text-foreground transition">
+              Privacy policy
+            </Link>
+            <Link to="/terms" className="hover:text-foreground transition">
+              Terms of service
+            </Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
