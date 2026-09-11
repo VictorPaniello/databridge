@@ -47,10 +47,14 @@ def sign_payload(body: bytes, secret: str) -> str:
     return f"sha256={digest}"
 
 
-def notify_new_record(db: Session, record: ClientRecord) -> WebhookDelivery | None:
-    if not settings.webhook_url:
-        return None  # no receiver configured - nothing to do, not an error
-
+def deliver_attempt(db: Session, record: ClientRecord, attempt_number: int) -> WebhookDelivery:
+    """One HTTP attempt: builds and signs the payload, POSTs it, persists
+    and commits exactly one WebhookDelivery row recording the outcome.
+    Shared by notify_new_record()'s manual-replay retry loop below and
+    webhook_worker.py's process_due_jobs() - the only difference between
+    an automatic (queued) attempt and a replay's is who calls this and
+    how the next attempt (if any) gets scheduled, not what one attempt
+    itself does."""
     payload = {
         "event": "client_record.created",
         "record": {
@@ -63,35 +67,45 @@ def notify_new_record(db: Session, record: ClientRecord) -> WebhookDelivery | No
     }
     # Serialized once, here - so the signature is computed over the exact
     # bytes that get sent, rather than trusting httpx's own json= encoding
-    # to produce identical bytes to whatever we signed separately. Signed
-    # once too: the same body and signature are replayed on every retry,
-    # not re-signed per attempt - a receiver verifying the signature sees
-    # the identical payload it would have on a single-attempt delivery.
+    # to produce identical bytes to whatever we signed separately.
     body = json.dumps(payload).encode("utf-8")
 
     headers = {"Content-Type": "application/json"}
     if settings.webhook_secret:
         headers["X-Databridge-Signature-256"] = sign_payload(body, settings.webhook_secret)
 
+    delivery = WebhookDelivery(
+        record_id=record.id, url=settings.webhook_url, success=False, attempt_number=attempt_number
+    )
+    try:
+        response = httpx.post(
+            settings.webhook_url, content=body, headers=headers, timeout=TIMEOUT_SECONDS
+        )
+        delivery.status_code = response.status_code
+        delivery.success = response.is_success
+        if not response.is_success:
+            delivery.error = f"non-2xx response: {response.status_code}"
+    except httpx.HTTPError as exc:
+        delivery.error = f"{type(exc).__name__}: {exc}"
+
+    db.add(delivery)
+    db.commit()
+    return delivery
+
+
+def notify_new_record(db: Session, record: ClientRecord) -> WebhookDelivery | None:
+    """Manual, on-demand replay only (POST /records/{id}/webhooks/replay,
+    main.py) - the automatic post-ingest notification goes through
+    enqueue_delivery() and the background worker instead (see
+    webhook_worker.py). Kept synchronous deliberately: a replay is a
+    human asking for an immediate resend mid-incident, not something that
+    should wait behind the queue's own poll interval."""
+    if not settings.webhook_url:
+        return None  # no receiver configured - nothing to do, not an error
+
     delivery: WebhookDelivery | None = None
     for attempt in range(1, settings.webhook_max_attempts + 1):
-        delivery = WebhookDelivery(
-            record_id=record.id, url=settings.webhook_url, success=False, attempt_number=attempt
-        )
-        try:
-            response = httpx.post(
-                settings.webhook_url, content=body, headers=headers, timeout=TIMEOUT_SECONDS
-            )
-            delivery.status_code = response.status_code
-            delivery.success = response.is_success
-            if not response.is_success:
-                delivery.error = f"non-2xx response: {response.status_code}"
-        except httpx.HTTPError as exc:
-            delivery.error = f"{type(exc).__name__}: {exc}"
-
-        db.add(delivery)
-        db.commit()
-
+        delivery = deliver_attempt(db, record, attempt)
         if delivery.success:
             return delivery
         if attempt < settings.webhook_max_attempts:
@@ -99,5 +113,5 @@ def notify_new_record(db: Session, record: ClientRecord) -> WebhookDelivery | No
 
     # Every attempt failed - the last delivery row (already persisted
     # above, success=False) is the one callers get back, the same
-    # contract as before retries existed.
+    # contract as before this refactor.
     return delivery
