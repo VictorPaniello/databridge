@@ -4,6 +4,7 @@ import * as api from "../api/client";
 import { ApiError } from "../api/client";
 import type { ClientRecord, WebhookDelivery, WebhookJobStatus } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { CopyButton } from "../components/CopyButton";
 
 export function RecordDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -147,7 +148,14 @@ export function RecordDetailPage() {
                     <td className="px-4 py-2 text-muted-foreground">
                       {new Date(w.attempted_at).toLocaleString()}
                     </td>
-                    <td className="px-4 py-2 text-muted-foreground truncate max-w-xs">{w.url}</td>
+                    <td className="px-4 py-2 text-muted-foreground">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate max-w-xs" title={w.url}>
+                          {w.url}
+                        </span>
+                        <CopyButton value={w.url} label="Copy webhook URL" />
+                      </div>
+                    </td>
                     <td className="px-4 py-2">{w.status_code ?? "—"}</td>
                     <td className="px-4 py-2">
                       {w.success ? (
