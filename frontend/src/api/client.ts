@@ -6,6 +6,7 @@ import type {
   IngestResult,
   RecordsPage,
   WebhookDelivery,
+  WebhookJobStatus,
 } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -297,6 +298,10 @@ export async function getRecord(id: string): Promise<ClientRecord> {
 
 export async function getRecordWebhooks(id: string): Promise<WebhookDelivery[]> {
   return request<WebhookDelivery[]>(`/records/${id}/webhooks`);
+}
+
+export async function getRecordWebhookStatus(id: string): Promise<WebhookJobStatus> {
+  return request<WebhookJobStatus>(`/records/${id}/webhook-status`);
 }
 
 // Manually re-sends the notification for one record, on demand - a real,
