@@ -21,6 +21,17 @@ POLL_INTERVAL_SECONDS = 2.0
 
 
 def main() -> None:
+    # Python fully buffers stdout by default whenever it isn't a TTY -
+    # true for every real deployment of this long-running process (a
+    # Docker container's stdout, Railway's log collector), so the prints
+    # below would sit in that buffer and never reach the platform's logs
+    # at all, not just late - confirmed live on Railway: the container
+    # showed Active with zero log lines. Reconfiguring here fixes it at
+    # the source, for any way this script ends up invoked, rather than
+    # relying on every future deploy remembering `python -u` or setting
+    # PYTHONUNBUFFERED=1 by hand.
+    sys.stdout.reconfigure(line_buffering=True)
+
     print(f"webhook worker started, polling every {POLL_INTERVAL_SECONDS}s")
     while True:
         db = SessionLocal()
