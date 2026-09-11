@@ -66,7 +66,8 @@ def _clean_tables():
         # without adding it here breaks every test that touches the DB,
         # not just ones that use it directly.
         conn.exec_driver_sql(
-            "TRUNCATE webhook_deliveries, client_records, ingestion_runs, oauth_account, users"
+            "TRUNCATE webhook_jobs, webhook_deliveries, client_records, ingestion_runs, "
+            "oauth_account, users"
         )
 
 

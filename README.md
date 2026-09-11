@@ -90,13 +90,24 @@ CSV/Excel upload
 tidycsv (schema-driven cleaning, validation)
       │
       ▼
-PostgreSQL (ingestion_runs, client_records, webhook_deliveries)
+PostgreSQL (ingestion_runs, client_records, webhook_jobs, webhook_deliveries)
       │
       ▼
-Outbound webhook (retried with backoff on failure - a failed delivery
-                   never fails the ingest, it's retried and logged, and
-                   the data is already safely persisted either way)
+webhook_jobs queue ──▶ background worker (scripts/webhook_worker.py,
+                        its own long-lived process) ──▶ outbound webhook
+                        (retried with backoff on failure, one attempt at
+                        a time, off the request path - a failed delivery
+                        never fails the ingest, it's retried and logged,
+                        and the data is already safely persisted either
+                        way)
 ```
+
+Automatic post-ingest notification is queued, not sent inline: `ingest_file()`
+enqueues one `webhook_jobs` row per new record, and `scripts/webhook_worker.py`
+(a separate, continuously-running process - see [Deployment](#deployment))
+claims and delivers them. A manual replay (`POST /records/{id}/webhooks/replay`)
+is the one exception - it still delivers synchronously in the request, since
+that's a human asking for an immediate resend, not queued background work.
 
 `config.py` holds every environment-dependent value (database URL, webhook
 URL/secret, schema path) - nothing is hardcoded, so the same image runs

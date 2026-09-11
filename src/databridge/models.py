@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -134,3 +134,41 @@ class WebhookDelivery(Base):
     )
 
     record: Mapped[ClientRecord] = relationship(back_populates="webhook_deliveries")
+
+
+class WebhookJob(Base):
+    """The queue enqueue_delivery() (webhooks.py) writes to and
+    webhook_worker.py's process_due_jobs() claims from - one row per
+    record needing an automatic (post-ingest) notification. Separate
+    from WebhookDelivery (one row per actual HTTP attempt, written by
+    both this queue's worker and the manual replay path) - this table
+    tracks *scheduling* (is a notification still owed, and when's the
+    next attempt due), not delivery history."""
+
+    __tablename__ = "webhook_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    record_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("client_records.id", ondelete="cascade"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    """"pending" (still owed, waiting for available_at), "done" (delivered
+    successfully), or "dead" (every attempt up to settings.
+    webhook_max_attempts failed - see webhook_worker.py's
+    process_due_jobs()). A plain string, not a DB enum or CHECK
+    constraint - enough at this project's scale, the same tradeoff most
+    other string columns here already make."""
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    """The attempt about to be made, not the last one that ran - starts
+    at 1, incremented only after an attempt fails (see
+    process_due_jobs()), so a job that succeeds on its first try never
+    advances past 1."""
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    """When this job next becomes eligible to be claimed - now at enqueue
+    time, now + backoff after each failed attempt."""
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

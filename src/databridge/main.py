@@ -229,16 +229,20 @@ async def upload_records(
 ) -> IngestResult:
     content = await _read_upload_within_limit(file)
     schema = load_schema()
-    # ingest_file does CPU-bound CSV parsing, several synchronous DB
-    # round-trips, and (via notify_new_record) a blocking httpx.post to the
-    # webhook receiver with up to a 5s timeout. This route is `async def`
-    # (needed for `await file.read()` above), and FastAPI only auto-offloads
-    # *sync* `def` routes to a worker thread - a sync call made directly
-    # inside an async route runs straight on the single event loop thread
-    # instead, stalling every other in-flight request for as long as it
-    # takes. run_in_threadpool moves it off the loop, the same mechanism
-    # FastAPI itself uses for sync routes. Found via a deliberate
-    # scalability/performance review, not a user report.
+    # ingest_file does CPU-bound CSV parsing and several synchronous DB
+    # round-trips (schema mapping/validation via tidycsv, one INSERT per
+    # row) - no longer a blocking httpx.post to the webhook receiver too,
+    # since the automatic post-ingest notification is now enqueue_delivery()
+    # (a fast DB insert, see webhooks.py/webhook_worker.py) instead of a
+    # direct notify_new_record() call, but the CSV/DB work alone still
+    # justifies offloading. This route is `async def` (needed for `await
+    # file.read()` above), and FastAPI only auto-offloads *sync* `def`
+    # routes to a worker thread - a sync call made directly inside an
+    # async route runs straight on the single event loop thread instead,
+    # stalling every other in-flight request for as long as it takes.
+    # run_in_threadpool moves it off the loop, the same mechanism FastAPI
+    # itself uses for sync routes. Found via a deliberate scalability/
+    # performance review, not a user report.
     inserted, run = await run_in_threadpool(
         ingest_file, db, file.filename or "upload.csv", content, schema, user.id
     )

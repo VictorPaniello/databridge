@@ -8,14 +8,31 @@ from __future__ import annotations
 import hashlib
 import hmac
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
+from databridge.webhook_worker import process_due_jobs
 from databridge.webhooks import sign_payload
 
 WEBHOOK_SECRET = "test-webhook-secret-for-signature-verification"
+
+
+def _drain_jobs(db: Session, max_iterations: int = 20) -> None:
+    """Repeatedly processes due webhook jobs until none are left (or
+    max_iterations is hit) - a job that just failed becomes due again
+    only after its backoff delay, so tests exercising a full retry
+    sequence need to give that real wall-clock time to pass, the same
+    reason flaky_webhook_receiver below shrinks
+    settings.webhook_retry_backoff_seconds to 0.01 instead of the real
+    default."""
+    for _ in range(max_iterations):
+        time.sleep(0.02)
+        if process_due_jobs(db) == 0:
+            return
 
 
 class _CapturingHandler(BaseHTTPRequestHandler):
@@ -64,9 +81,10 @@ def _upload(client: TestClient):
         return client.post("/records/upload", files={"file": ("messy_clients.csv", f, "text/csv")})
 
 
-def test_receiver_can_verify_the_real_signature(client: TestClient, webhook_receiver):
+def test_receiver_can_verify_the_real_signature(client: TestClient, db: Session, webhook_receiver):
     response = _upload(client)
     assert response.status_code == 200
+    _drain_jobs(db)
 
     assert webhook_receiver.received, "webhook receiver never got a request"
     delivery = webhook_receiver.received[0]
@@ -80,11 +98,12 @@ def test_receiver_can_verify_the_real_signature(client: TestClient, webhook_rece
     assert delivery["signature"] == expected
 
 
-def test_tampered_body_fails_verification(client: TestClient, webhook_receiver):
+def test_tampered_body_fails_verification(client: TestClient, db: Session, webhook_receiver):
     """Proves the signature actually protects integrity, not just presence
     - a receiver that (correctly) recomputes the HMAC over a body an
     attacker modified in transit must see a mismatch."""
     _upload(client)
+    _drain_jobs(db)
     delivery = webhook_receiver.received[0]
 
     tampered_body = delivery["body"] + b" tampered"
@@ -167,12 +186,13 @@ def _upload_single_row(client: TestClient):
 
 
 def test_retries_and_eventually_succeeds_against_a_real_flaky_receiver(
-    client: TestClient, flaky_webhook_receiver
+    client: TestClient, db: Session, flaky_webhook_receiver
 ):
     flaky_webhook_receiver.fail_first_n = 2  # 500, 500, then a real 200
 
     response = _upload_single_row(client)
     record_id = response.json()["records"][0]["id"]
+    _drain_jobs(db)
 
     assert len(flaky_webhook_receiver.received) == 3  # first try + 2 retries
 
@@ -184,12 +204,13 @@ def test_retries_and_eventually_succeeds_against_a_real_flaky_receiver(
 
 
 def test_gives_up_after_max_attempts_and_logs_every_one(
-    client: TestClient, flaky_webhook_receiver
+    client: TestClient, db: Session, flaky_webhook_receiver
 ):
     flaky_webhook_receiver.fail_first_n = 999  # never succeeds
 
     response = _upload_single_row(client)
     record_id = response.json()["records"][0]["id"]
+    _drain_jobs(db)
 
     # settings.webhook_max_attempts defaults to 3 - every one of them was
     # actually tried against the real receiver, not just the first.
@@ -200,8 +221,9 @@ def test_gives_up_after_max_attempts_and_logs_every_one(
     assert all(d["success"] is False for d in deliveries)
 
 
-def test_replay_sends_a_fresh_delivery_on_demand(client: TestClient, webhook_receiver):
+def test_replay_sends_a_fresh_delivery_on_demand(client: TestClient, db: Session, webhook_receiver):
     record_id = _upload(client).json()["records"][0]["id"]
+    _drain_jobs(db)
     assert len(webhook_receiver.received) == 5  # one per row in messy_clients.csv
 
     response = client.post(f"/records/{record_id}/webhooks/replay")
@@ -216,9 +238,10 @@ def test_replay_sends_a_fresh_delivery_on_demand(client: TestClient, webhook_rec
 
 
 def test_replay_retries_on_a_transient_failure_the_same_as_a_real_delivery(
-    client: TestClient, flaky_webhook_receiver
+    client: TestClient, db: Session, flaky_webhook_receiver
 ):
     record_id = _upload_single_row(client).json()["records"][0]["id"]
+    _drain_jobs(db)
     assert len(flaky_webhook_receiver.received) == 1  # succeeded first try (fail_first_n=0)
 
     # fail_first_n counts every request this handler has ever seen, not a
