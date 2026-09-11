@@ -7,6 +7,27 @@ nothing has been tagged as a release yet, so everything below is under
 ## [Unreleased]
 
 ### Added
+- **Accessibility fixes, found via real computed WCAG contrast ratios,
+  not assumed from "it's a standard Tailwind color."** Several
+  light-mode text/UI colors measured below the required minimums:
+  `--primary` (emerald-600, used for links, the "Clean" stat, and
+  primary-button text) at 3.61:1 against 4.5:1 required for normal text;
+  the primary button's own text at 3.58:1; `text-amber-600` (the
+  "Flagged" stat) at 3.05:1; `text-red-500` (every error message) at
+  3.60:1; and, worse for a "keyboard friendly forms" claim specifically,
+  the visible keyboard-focus ring itself (`--ring`, emerald-500) at only
+  2.43:1 against the 3:1 WCAG 1.4.11 non-text minimum. Dark mode's own
+  lighter shades already cleared every minimum comfortably and are
+  unchanged. Fixed by moving each color one step darker on the Tailwind
+  scale (600→700 for `--primary`/amber/red, 500→600 for `--ring`) -
+  real ratios recomputed and verified to clear their thresholds before
+  committing, not just "should be better now." Also added `aria-live`
+  and a visually-hidden met/not-met announcement to the password
+  requirements checklist (previously relied on the announced name of a
+  ✓/○ Unicode glyph, which varies by screen reader and isn't
+  translated). Softened `DELETE /records/{id}`'s README description from
+  "the GDPR right-to-erasure endpoint" (an overreaching claim - GDPR
+  compliance isn't one endpoint) to "supports the GDPR right to erasure."
 - **Persisted ingestion runs.** Before this, the only record of what an
   upload actually did was `IngestResult` - the HTTP response, gone the
   moment it wasn't being looked at (a closed tab, a script that didn't

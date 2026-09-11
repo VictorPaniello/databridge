@@ -30,7 +30,7 @@ export function IngestionRunsPage() {
       {loading ? (
         <p className="text-muted-foreground text-sm">Loading…</p>
       ) : error ? (
-        <p className="text-red-500 text-sm">{error}</p>
+        <p className="text-red-600 text-sm">{error}</p>
       ) : runs.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           No uploads yet. <Link to="/" className="text-ring hover:underline">Upload a file</Link>{" "}
@@ -60,7 +60,7 @@ export function IngestionRunsPage() {
                   </td>
                   <td className="px-4 py-2 text-right">{run.rows_total}</td>
                   <td className="px-4 py-2 text-right text-primary">{run.rows_clean}</td>
-                  <td className="px-4 py-2 text-right text-amber-600 dark:text-amber-400">
+                  <td className="px-4 py-2 text-right text-amber-700 dark:text-amber-400">
                     {run.rows_flagged}
                   </td>
                   <td className="px-4 py-2 text-right text-muted-foreground">

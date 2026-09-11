@@ -43,7 +43,7 @@ export function OAuthCallbackPage() {
   return (
     <div className="mx-auto max-w-sm mt-24 text-center">
       {error ? (
-        <p className="text-red-500 text-sm">{error}</p>
+        <p className="text-red-600 text-sm">{error}</p>
       ) : (
         <p className="text-muted-foreground text-sm">Signing you in…</p>
       )}

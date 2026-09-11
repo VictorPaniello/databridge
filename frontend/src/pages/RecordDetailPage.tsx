@@ -61,7 +61,7 @@ export function RecordDetailPage() {
   }
 
   if (loading) return <p className="text-muted-foreground text-sm">Loading…</p>;
-  if (error) return <p className="text-red-500 text-sm">{error}</p>;
+  if (error) return <p className="text-red-600 text-sm">{error}</p>;
   if (!record) return null;
 
   return (
@@ -117,7 +117,7 @@ export function RecordDetailPage() {
           </button>
         </div>
         {replayError && (
-          <p className="mb-2 text-sm text-red-500">{replayError}</p>
+          <p className="mb-2 text-sm text-red-600">{replayError}</p>
         )}
         {webhooks.length === 0 ? (
           <p className="text-muted-foreground text-sm">
@@ -148,7 +148,7 @@ export function RecordDetailPage() {
                       {w.success ? (
                         <span className="text-primary">Delivered</span>
                       ) : (
-                        <span className="text-red-500" title={w.error ?? undefined}>
+                        <span className="text-red-600" title={w.error ?? undefined}>
                           Failed
                         </span>
                       )}

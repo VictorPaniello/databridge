@@ -3,8 +3,17 @@
 @tailwind utilities;
 
 /* Emerald (brand/primary) + stone (neutral) - both straight from
-   Tailwind's own palette, not arbitrary hex values, so the contrast
-   ratios are the ones already tested across thousands of real apps.
+   Tailwind's own palette, not arbitrary hex values. "Straight from the
+   palette" alone isn't a contrast guarantee, though - emerald-600/
+   emerald-500 (the light-mode --primary/--ring below, until this
+   comment) measured 3.61:1 and 2.43:1 against this page's own
+   background, real WCAG contrast ratios computed with the standard
+   relative-luminance formula, both under what's required (4.5:1 for
+   normal text, 3:1 for a non-text focus indicator). Bumped one step
+   darker each (now 700-weight) to actually clear those minimums - see
+   CHANGELOG for the full set of ratios checked. Dark mode's own
+   lighter-on-near-black shades already cleared every minimum
+   comfortably and are unchanged.
    Applied via a `.dark` class on <html> (see ThemeToggle.tsx), not
    prefers-color-scheme alone - index.html has a small blocking script
    that sets the class before first paint so there's no flash of the
@@ -15,7 +24,7 @@
   --foreground: #1c1917; /* stone-900 */
   --card: #ffffff;
   --card-foreground: #1c1917;
-  --primary: #059669; /* emerald-600 */
+  --primary: #047857; /* emerald-700 - was emerald-600 (3.61:1 as text, failed AA) */
   --primary-foreground: #ecfdf5; /* emerald-50 */
   --secondary: #f5f5f4; /* stone-100 */
   --secondary-foreground: #1c1917;
@@ -25,7 +34,7 @@
   --accent-foreground: #065f46; /* emerald-800 */
   --border: #e7e5e4; /* stone-200 */
   --input: #e7e5e4; /* stone-200 */
-  --ring: #10b981; /* emerald-500 */
+  --ring: #059669; /* emerald-600 - was emerald-500 (2.43:1, failed the 3:1 non-text minimum) */
 }
 
 .dark {

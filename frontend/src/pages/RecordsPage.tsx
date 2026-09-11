@@ -261,7 +261,7 @@ export function RecordsPage() {
         <div className="mb-6 rounded-md border border-border px-4 py-3 text-sm">
           <span className="font-medium">{lastResult.rows_total}</span> rows processed —{" "}
           <span className="text-primary">{lastResult.rows_clean} clean</span>,{" "}
-          <span className="text-amber-600 dark:text-amber-400">
+          <span className="text-amber-700 dark:text-amber-400">
             {lastResult.rows_flagged} flagged
           </span>
           , {lastResult.rows_dropped_duplicates} duplicate(s) skipped
@@ -285,7 +285,7 @@ export function RecordsPage() {
                 ? "0"
                 : `${stats.flagged} (${Math.round((stats.flagged / stats.total) * 100)}%)`
             }
-            valueClassName="text-amber-600 dark:text-amber-400"
+            valueClassName="text-amber-700 dark:text-amber-400"
           />
         </div>
       )}
@@ -318,7 +318,7 @@ export function RecordsPage() {
       {loading ? (
         <p className="text-muted-foreground text-sm">Loading…</p>
       ) : error ? (
-        <p className="text-red-500 text-sm">{error}</p>
+        <p className="text-red-600 text-sm">{error}</p>
       ) : records.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           No records yet. Upload a CSV or Excel file to get started.

@@ -52,7 +52,7 @@ export function ResetPasswordPage() {
 
         {!token ? (
           <div className="space-y-4">
-            <p className="text-sm text-red-500">
+            <p className="text-sm text-red-600">
               This link is missing its reset token. Request a new one below.
             </p>
             <Link
@@ -78,12 +78,14 @@ export function ResetPasswordPage() {
                 className="w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-ring"
               />
               {password && (
-                <ul className="mt-2 space-y-0.5 text-xs">
+                <ul className="mt-2 space-y-0.5 text-xs" aria-live="polite">
                   {PASSWORD_RULES.map((rule) => {
                     const met = rule.test(password);
                     return (
                       <li key={rule.label} className={met ? "text-primary" : "text-muted-foreground"}>
-                        {met ? "✓" : "○"} {rule.label}
+                        <span aria-hidden="true">{met ? "✓" : "○"}</span>{" "}
+                        {rule.label}
+                        <span className="sr-only">{met ? " - met" : " - not met yet"}</span>
                       </li>
                     );
                   })}
@@ -106,7 +108,7 @@ export function ResetPasswordPage() {
               />
             </div>
 
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            {error && <p className="text-sm text-red-600">{error}</p>}
 
             <button
               type="submit"
