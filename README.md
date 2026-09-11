@@ -1,4 +1,4 @@
-# tidybridge
+![tidybridge](.github/banner.svg)
 
 A small service that does what a Forward Deployed Engineer does on day one
 at a new client: take their messy data export, clean it, get it into a real
