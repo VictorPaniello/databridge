@@ -634,6 +634,19 @@ Found via a deliberate review, not a user report:
 - Also checked and ruled out as **not** a hole: `PATCH /users/me` cannot
   be used to self-promote to `is_superuser` - fastapi-users' safe-update
   default already strips that field, confirmed by actually trying it.
+- **No security-related response headers, and the full API schema was
+  publicly browsable in production** - found against a standard
+  checklist (hardcoded secrets, auth, injection, CORS, cookies, etc. -
+  every other item on it was already covered by the points above, or
+  didn't apply). Fixed with a small `X-Content-Type-Options` /
+  `X-Frame-Options` / `Referrer-Policy` / `Strict-Transport-Security`
+  middleware (`main.py`), and a new `ENABLE_API_DOCS` setting
+  (`config.py`) that turns off `/docs`, `/redoc`, and `/openapi.json`
+  when false - production sets it to false. Neither of these is a real
+  access-control gap on its own (every route still enforces its own
+  auth regardless of whether its schema is publicly listed), but leaving
+  the whole API surface browsable is free reconnaissance for no benefit
+  once the API is actually live.
 
 - **Known, currently unpatched: `react-router-dom` 6.30.6 (the latest
   6.x release - there is no patched 6.x) carries a moderate-severity
