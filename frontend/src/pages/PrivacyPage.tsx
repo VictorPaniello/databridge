@@ -135,15 +135,21 @@ export function PrivacyPage() {
 
       <Section title="How long data is kept">
         <p>
-          Honestly, as it actually works today rather than a target policy: your account and every
-          client record you've uploaded are kept <strong>until you delete them</strong>. There is
-          no automatic expiry or scheduled deletion right now. You can delete an individual client
-          record at any time from the records list, or your entire account (and everything it
-          owns) from{" "}
+          <strong>Client data</strong> - what you upload about your own clients - is kept for up to{" "}
+          <strong>one year</strong> after it's ingested, then deleted automatically by a scheduled
+          job. This isn't just a policy statement; it's a real, tested, scheduled process that
+          actually deletes the data - see the project's own README for the technical detail. You
+          can also delete an individual client record yourself at any time, sooner than that, from
+          the records list.
+        </p>
+        <p className="mt-2">
+          <strong>Your own account</strong> (email, name, phone, password) is different: it's kept
+          for as long as you want it, with no automatic expiry, until you delete it yourself from{" "}
           <Link to="/settings" className="text-ring hover:underline">
             Account settings
           </Link>
-          .
+          . Deleting your account also immediately erases every client record it owns, rather than
+          waiting out the one-year window.
         </p>
         <p className="mt-2">
           Database backups are retained separately for up to 30 days for disaster-recovery
