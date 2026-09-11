@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -70,7 +70,17 @@ _databridge_logger.propagate = False
 # Base.metadata.create_all() on every startup only ever created missing
 # tables, never altered existing ones - real bugs found once a column
 # needed adding to an already-deployed table (see CHANGELOG).
-app = FastAPI(title="databridge")
+#
+# docs_url/redoc_url/openapi_url are None in production (settings.
+# enable_api_docs=False there) - see its own docstring in config.py for
+# why: not a security boundary, just no reason to leave the whole API
+# schema publicly browsable once this is actually live.
+app = FastAPI(
+    title="databridge",
+    docs_url="/docs" if settings.enable_api_docs else None,
+    redoc_url="/redoc" if settings.enable_api_docs else None,
+    openapi_url="/openapi.json" if settings.enable_api_docs else None,
+)
 
 # Only the configured frontend origin may call this API from a browser -
 # not "*", since credentialed requests (the Authorization header the SPA
@@ -96,6 +106,27 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+
+# Defense-in-depth response headers - neither FastAPI/Starlette nor
+# anything else in front of this API (Railway passes requests straight
+# through, no CDN/reverse-proxy config of its own) add any of these by
+# default. Registered last (Starlette's middleware stack runs the
+# most-recently-added one outermost), so it still applies to CORS
+# preflight responses and SlowAPI's own 429s, not just routes that reach
+# a normal handler.
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Harmless to send over plain HTTP too (browsers only ever honor it on
+    # an HTTPS response) - Railway terminates TLS in front of this app in
+    # production, see the README's Deployment section.
+    response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+    return response
+
 
 _STRICT_AUTH_LIMIT = "5/minute"
 

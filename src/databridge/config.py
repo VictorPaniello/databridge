@@ -131,5 +131,14 @@ class Settings(BaseSettings):
     verified-domain address once one exists; until then, production
     email only actually reaches the account owner."""
 
+    enable_api_docs: bool = True
+    """Whether FastAPI's own interactive docs (/docs, /redoc) and the raw
+    schema (/openapi.json) are served at all (see main.py). Every route
+    those describe still enforces its own auth regardless of this - it's
+    not a security boundary - but leaving the full API surface publicly
+    browsable is free reconnaissance for no real benefit once the API is
+    actually live. Defaults True for local development convenience;
+    production sets this to False via Railway's environment variables."""
+
 
 settings = Settings()
