@@ -292,6 +292,39 @@ export async function listRecords(
   return all;
 }
 
+// Not routed through request() - that helper always expects JSON back;
+// this is a raw CSV file the browser needs to save, not parse. Reuses
+// its exact auth-header logic anyway: a plain <a href> link can't carry
+// a bearer token (only cookies travel with a plain navigation, and this
+// API doesn't use those for auth), so the download has to go through a
+// real fetch() first.
+export async function exportRecords(ingestionRunId?: string): Promise<void> {
+  const filter = ingestionRunId ? `?ingestion_run_id=${ingestionRunId}` : "";
+  const token = getToken();
+  const response = await fetch(`${API_URL}/records/export${filter}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, "Couldn't export records.");
+  }
+
+  const blob = await response.blob();
+  // Reuses the filename the backend already generated (its
+  // Content-Disposition header - see main.py's export_records() and the
+  // CORS expose_headers config that makes this readable cross-origin)
+  // rather than making up a second one here.
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? "databridge-records.csv";
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function getRecord(id: string): Promise<ClientRecord> {
   return request<ClientRecord>(`/records/${id}`);
 }

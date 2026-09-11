@@ -19,6 +19,14 @@ export function IngestionRunsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  async function handleExport(runId: string) {
+    try {
+      await api.exportRecords(runId);
+    } catch {
+      alert("Couldn't export this upload's records.");
+    }
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight mb-1">Upload history</h1>
@@ -69,13 +77,21 @@ export function IngestionRunsPage() {
                   <td className="px-4 py-2 text-right text-muted-foreground">
                     {run.rows_skipped_existing}
                   </td>
-                  <td className="px-4 py-2 text-right">
+                  <td className="px-4 py-2 text-right whitespace-nowrap">
                     <Link
                       to={`/?ingestion_run_id=${run.id}`}
                       className="text-xs text-ring hover:underline"
                     >
                       View records
                     </Link>
+                    {" · "}
+                    <button
+                      type="button"
+                      onClick={() => handleExport(run.id)}
+                      className="text-xs text-ring hover:underline"
+                    >
+                      Export
+                    </button>
                   </td>
                 </tr>
               ))}
