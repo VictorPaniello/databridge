@@ -1,4 +1,4 @@
-# databridge
+# tidybridge
 
 A small service that does what a Forward Deployed Engineer does on day one
 at a new client: take their messy data export, clean it, get it into a real
@@ -134,10 +134,10 @@ went completely unaccounted for in any counter until this field was
 added, which meant the four *other* counters silently stopped summing to
 `rows_total` on a re-upload.
 
-Each webhook delivery is signed: `X-Databridge-Signature-256` is an
+Each webhook delivery is signed: `X-Tidybridge-Signature-256` is an
 HMAC-SHA256 of the exact request body, keyed with `WEBHOOK_SECRET` - the
 same pattern Stripe and GitHub use, so a receiver can verify both that the
-request actually came from databridge and that the body wasn't altered in
+request actually came from tidybridge and that the body wasn't altered in
 transit, without the secret itself ever going out on the wire. The same
 signed body is replayed on every retry rather than re-signed per attempt,
 so a receiver verifying the signature sees an identical payload whether
@@ -182,7 +182,7 @@ cp .env.example .env  # edit DATABASE_URL if needed
 
 alembic upgrade head  # creates/updates the schema - see "Database migrations" below
 
-uvicorn databridge.main:app --reload --app-dir src
+uvicorn tidybridge.main:app --reload --app-dir src
 ```
 
 ```bash
@@ -192,7 +192,7 @@ curl -X POST http://127.0.0.1:8000/records/upload \
 
 ### Tests
 
-Tests run against a **real** PostgreSQL database (`databridge_test`), not a
+Tests run against a **real** PostgreSQL database (`tidybridge_test`), not a
 mock — the whole point of this project is proving the ingest → Postgres →
 API path actually works. The schema is bootstrapped by running the real
 Alembic migration chain once per test session (`alembic upgrade head`),
@@ -208,7 +208,7 @@ pytest
 ruff check .
 ```
 
-If `databridge_test` predates this (tables from an old `create_all()` run,
+If `tidybridge_test` predates this (tables from an old `create_all()` run,
 no `alembic_version` tracking), drop and recreate it once — the same fix
 used when this project itself adopted Alembic.
 
@@ -231,11 +231,11 @@ The Docker image runs `alembic upgrade head` before starting the server
 ## Docker
 
 ```bash
-docker build -t databridge .
+docker build -t tidybridge .
 docker run -p 8000:8000 \
   -e DATABASE_URL="postgresql+psycopg://user:pass@host:5432/db" \
   -e WEBHOOK_URL="https://example.com/hook" \
-  databridge
+  tidybridge
 ```
 
 Note: the image needs `git` (installed in the Dockerfile) because `tidycsv`
@@ -368,13 +368,13 @@ Building the URL from Postgres's individual `PGUSER`/`PGPASSWORD`/`PGHOST`/
 ## Backups
 
 Client data lives in Postgres, so a mistake or corruption there shouldn't be
-unrecoverable. `scripts/backup_db.py` (logic in `src/databridge/backup.py`)
+unrecoverable. `scripts/backup_db.py` (logic in `src/tidybridge/backup.py`)
 runs `pg_dump -Fc` against the database and writes the dump to
 `BACKUP_DIR`, then deletes dumps older than `BACKUP_RETENTION_DAYS` (defaults:
 `/data/backups`, 30 days).
 
 On Railway this runs as its **own service** in the same project - same repo/
-image as `databridge`, but with:
+image as `tidybridge`, but with:
 - **Custom Start Command:** `python scripts/backup_db.py`
 - **A Volume** mounted at `/data/backups` - not the app's own container
   filesystem, which is wiped on every deploy
@@ -403,14 +403,14 @@ deployed service too, not just the local reproduction: triggered the real
 Railway Cron Schedule service on demand ("Run now") and read its deploy
 logs, confirming it dumped the real production database to a real file on
 the real mounted Volume (`Dumping database to
-/data/backups/databridge-backup-<timestamp>.dump...` / `Dump complete`).
+/data/backups/tidybridge-backup-<timestamp>.dump...` / `Dump complete`).
 
 ## Data retention
 
 Client data - what an engineer uploads about their own clients, not the
 engineer's own account - is kept for `CLIENT_DATA_RETENTION_DAYS`
 (default 365) after it's ingested, then deleted automatically.
-`scripts/retention_sweep.py` (logic in `src/databridge/retention.py`)
+`scripts/retention_sweep.py` (logic in `src/tidybridge/retention.py`)
 deletes every `IngestionRun` older than the window in one statement - the
 `ON DELETE CASCADE` on `ClientRecord`/`WebhookDelivery`'s foreign keys
 (added by migration `e986a7123298`, for `DELETE /users/me`'s cascading
@@ -543,7 +543,7 @@ project's own code or in actually deploying it:
    never root or this app's. Found while adding the forgot-password flow
    below: the dev-fallback log line (no `RESEND_API_KEY` configured) never
    appeared anywhere, in a real terminal, not a test. Fixed by giving the
-   `databridge` logger namespace its own explicit level and handler in
+   `tidybridge` logger namespace its own explicit level and handler in
    `main.py`.
 
 ## What it doesn't do (yet)

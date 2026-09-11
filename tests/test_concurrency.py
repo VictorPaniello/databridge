@@ -37,7 +37,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from databridge.main import app
+from tidybridge.main import app
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -58,7 +58,7 @@ def webhook_receiver(monkeypatch):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
-    import databridge.config as config_module
+    import tidybridge.config as config_module
 
     monkeypatch.setattr(config_module.settings, "webhook_url", f"http://127.0.0.1:{port}/")
     monkeypatch.setattr(config_module.settings, "webhook_secret", None)
@@ -71,7 +71,7 @@ def webhook_receiver(monkeypatch):
 async def test_upload_offloads_ingest_off_the_event_loop_thread(
     client: TestClient, webhook_receiver, monkeypatch
 ):
-    import databridge.main as main_module
+    import tidybridge.main as main_module
 
     # httpx's ASGITransport calls the app in-process on whatever event loop
     # is currently running - no separate portal thread involved (unlike the

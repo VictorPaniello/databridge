@@ -10,7 +10,7 @@ export function TermsPage() {
 
       <Section title="What this is">
         <p>
-          databridge is a client-data ingestion service: you upload a CSV/Excel file, it's
+          tidybridge is a client-data ingestion service: you upload a CSV/Excel file, it's
           cleaned and validated, persisted, and (if you've configured one) forwarded to a webhook
           you control. It's operated by an individual developer (Victor Paniello), not a
           company, and run as a single instance with no uptime guarantee or service-level
@@ -33,7 +33,7 @@ export function TermsPage() {
           You may only upload data you have a lawful right to process and share - your own
           clients' or customers' data, under a lawful basis you already have with them (a
           contract, their consent, or another valid basis). You're the data controller for
-          anything you upload; databridge acts only as your processor, on your instructions - see
+          anything you upload; tidybridge acts only as your processor, on your instructions - see
           the{" "}
           <Link to="/privacy" className="text-ring hover:underline">
             Privacy policy
@@ -48,7 +48,7 @@ export function TermsPage() {
       </Section>
 
       <Section title="Acceptable use">
-        <p>Don't use databridge to:</p>
+        <p>Don't use tidybridge to:</p>
         <ul className="list-disc pl-5 space-y-1">
           <li>Attack, overload, or attempt to gain unauthorized access to the service or other accounts.</li>
           <li>Upload malicious files, or data intended to exploit the ingestion pipeline.</li>
@@ -69,13 +69,13 @@ export function TermsPage() {
             Account settings
           </Link>
           . This is real, permanent deletion, not a deactivation; there's no way to undo it once
-          confirmed, and no way for databridge to recover it for you afterward.
+          confirmed, and no way for tidybridge to recover it for you afterward.
         </p>
       </Section>
 
       <Section title="No warranty">
         <p>
-          databridge is provided "as is," without warranty of any kind, express or implied,
+          tidybridge is provided "as is," without warranty of any kind, express or implied,
           including merchantability or fitness for a particular purpose. It's a single-engineer
           project, not a commercial product backed by a support team - see the README for the
           explicit, current list of what it doesn't (yet) do.

@@ -16,8 +16,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from databridge.webhook_worker import process_due_jobs
-from databridge.webhooks import sign_payload
+from tidybridge.webhook_worker import process_due_jobs
+from tidybridge.webhooks import sign_payload
 
 WEBHOOK_SECRET = "test-webhook-secret-for-signature-verification"
 
@@ -48,7 +48,7 @@ class _CapturingHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length)
         _CapturingHandler.received.append(
-            {"body": body, "signature": self.headers.get("X-Databridge-Signature-256")}
+            {"body": body, "signature": self.headers.get("X-Tidybridge-Signature-256")}
         )
         self.send_response(200)
         self.end_headers()
@@ -65,7 +65,7 @@ def webhook_receiver(monkeypatch):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
-    import databridge.config as config_module
+    import tidybridge.config as config_module
 
     monkeypatch.setattr(config_module.settings, "webhook_url", f"http://127.0.0.1:{port}/")
     monkeypatch.setattr(config_module.settings, "webhook_secret", WEBHOOK_SECRET)
@@ -160,7 +160,7 @@ def flaky_webhook_receiver(monkeypatch):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
-    import databridge.config as config_module
+    import tidybridge.config as config_module
 
     monkeypatch.setattr(config_module.settings, "webhook_url", f"http://127.0.0.1:{port}/")
     monkeypatch.setattr(config_module.settings, "webhook_secret", None)

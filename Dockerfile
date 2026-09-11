@@ -47,4 +47,4 @@ EXPOSE 8000
 # https://... on GitHub - a mismatch GitHub would reject). '*' is safe
 # here because Railway's own proxy is the only thing that can reach this
 # container - nothing external talks to it directly.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn databridge.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn tidybridge.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]

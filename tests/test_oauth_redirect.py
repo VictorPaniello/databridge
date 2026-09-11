@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from databridge.auth import RedirectTransport
+from tidybridge.auth import RedirectTransport
 
 
 @pytest.mark.asyncio

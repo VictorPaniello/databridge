@@ -21,9 +21,9 @@ import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from databridge.config import settings
+from tidybridge.config import settings
 
-BACKUP_PREFIX = "databridge-backup-"
+BACKUP_PREFIX = "tidybridge-backup-"
 
 
 def _pg_dump_connection_string() -> str:

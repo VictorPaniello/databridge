@@ -9,7 +9,7 @@ from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, fun
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from databridge.db import Base
+from tidybridge.db import Base
 
 
 class IngestionRun(Base):

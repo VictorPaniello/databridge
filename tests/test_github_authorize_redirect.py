@@ -14,8 +14,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx_oauth.clients.github import GitHubOAuth2
 
-from databridge.auth import fastapi_users, make_github_authorize_redirect, oauth_redirect_backend
-from databridge.config import settings
+from tidybridge.auth import fastapi_users, make_github_authorize_redirect, oauth_redirect_backend
+from tidybridge.config import settings
 
 
 def _build_test_app() -> FastAPI:

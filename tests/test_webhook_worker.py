@@ -12,9 +12,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from databridge.models import ClientRecord, WebhookDelivery, WebhookJob
-from databridge.webhook_worker import process_due_jobs
-from databridge.webhooks import enqueue_delivery
+from tidybridge.models import ClientRecord, WebhookDelivery, WebhookJob
+from tidybridge.webhook_worker import process_due_jobs
+from tidybridge.webhooks import enqueue_delivery
 
 
 def _upload_single_row(client: TestClient):
@@ -44,7 +44,7 @@ def test_webhook_job_can_be_created_with_expected_defaults(db: Session):
 
 
 def test_enqueue_delivery_creates_a_pending_job(db: Session, monkeypatch):
-    import databridge.webhooks as webhooks_module
+    import tidybridge.webhooks as webhooks_module
 
     monkeypatch.setattr(webhooks_module.settings, "webhook_url", "http://127.0.0.1:1/unused")
     record = ClientRecord(source_file="test.csv")
@@ -60,7 +60,7 @@ def test_enqueue_delivery_creates_a_pending_job(db: Session, monkeypatch):
 
 
 def test_enqueue_delivery_is_a_noop_without_a_configured_webhook_url(db: Session, monkeypatch):
-    import databridge.webhooks as webhooks_module
+    import tidybridge.webhooks as webhooks_module
 
     monkeypatch.setattr(webhooks_module.settings, "webhook_url", None)
     record = ClientRecord(source_file="test.csv")
@@ -71,7 +71,7 @@ def test_enqueue_delivery_is_a_noop_without_a_configured_webhook_url(db: Session
 
 
 def test_process_due_jobs_delivers_a_pending_job_and_marks_it_done(db: Session, monkeypatch):
-    import databridge.webhooks as webhooks_module
+    import tidybridge.webhooks as webhooks_module
 
     monkeypatch.setattr(webhooks_module.settings, "webhook_url", "http://127.0.0.1:1/unused")
 
@@ -101,7 +101,7 @@ def test_process_due_jobs_delivers_a_pending_job_and_marks_it_done(db: Session, 
 
 
 def test_process_due_jobs_marks_a_job_dead_after_max_attempts(db: Session, monkeypatch):
-    import databridge.webhooks as webhooks_module
+    import tidybridge.webhooks as webhooks_module
 
     monkeypatch.setattr(webhooks_module.settings, "webhook_url", "http://127.0.0.1:1/unused")
     monkeypatch.setattr(webhooks_module.settings, "webhook_max_attempts", 2)
@@ -131,7 +131,7 @@ def test_webhook_status_is_not_configured_without_a_webhook_url(client: TestClie
 
 
 def test_webhook_status_is_pending_before_the_worker_runs(client: TestClient, monkeypatch):
-    import databridge.webhooks as webhooks_module
+    import tidybridge.webhooks as webhooks_module
 
     monkeypatch.setattr(webhooks_module.settings, "webhook_url", "http://127.0.0.1:1/unused")
     record_id = _upload_single_row(client).json()["records"][0]["id"]
@@ -144,7 +144,7 @@ def test_webhook_status_is_pending_before_the_worker_runs(client: TestClient, mo
 def test_webhook_status_is_dead_after_every_attempt_fails(
     client: TestClient, db: Session, monkeypatch
 ):
-    import databridge.webhooks as webhooks_module
+    import tidybridge.webhooks as webhooks_module
 
     monkeypatch.setattr(webhooks_module.settings, "webhook_url", "http://127.0.0.1:1/unused")
     monkeypatch.setattr(webhooks_module.settings, "webhook_max_attempts", 1)

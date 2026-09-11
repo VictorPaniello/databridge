@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
     ],
 )
 def test_weak_password_is_rejected(password: str, expected_reason_fragment: str):
-    from databridge.main import app
+    from tidybridge.main import app
 
     client = TestClient(app)
     response = client.post(
@@ -38,7 +38,7 @@ def test_weak_password_is_rejected(password: str, expected_reason_fragment: str)
 
 
 def test_strong_password_is_accepted():
-    from databridge.main import app
+    from tidybridge.main import app
 
     client = TestClient(app)
     response = client.post(

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from databridge.main import app
+from tidybridge.main import app
 
 
 def test_registration_requires_first_and_last_name():

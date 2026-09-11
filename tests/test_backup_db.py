@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from databridge.backup import (
+from tidybridge.backup import (
     BACKUP_PREFIX,
     _pg_dump_connection_string,
     create_dump,
@@ -21,7 +21,7 @@ from databridge.backup import (
 
 
 def test_pg_dump_connection_string_strips_the_sqlalchemy_driver_suffix(monkeypatch):
-    import databridge.config as config_module
+    import tidybridge.config as config_module
 
     monkeypatch.setattr(
         config_module.settings,
@@ -51,7 +51,7 @@ def test_create_dump_produces_a_real_restorable_dump():
 
 
 def test_create_dump_raises_on_a_bad_connection(monkeypatch):
-    import databridge.config as config_module
+    import tidybridge.config as config_module
 
     monkeypatch.setattr(
         config_module.settings,
@@ -64,7 +64,7 @@ def test_create_dump_raises_on_a_bad_connection(monkeypatch):
 
 
 def test_delete_old_backups_only_deletes_past_the_retention_window(monkeypatch):
-    import databridge.config as config_module
+    import tidybridge.config as config_module
 
     monkeypatch.setattr(config_module.settings, "backup_retention_days", 30)
 

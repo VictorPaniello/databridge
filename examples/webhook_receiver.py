@@ -1,12 +1,12 @@
 """Reference webhook receiver: what an integration partner's server should
-actually do with what databridge sends it. Not part of the deployed
+actually do with what tidybridge sends it. Not part of the deployed
 service - a standalone example, runnable on its own to test against a
-local databridge instance.
+local tidybridge instance.
 
 Usage:
     pip install fastapi uvicorn
     python examples/webhook_receiver.py
-    # then run databridge with:
+    # then run tidybridge with:
     #   WEBHOOK_URL=http://127.0.0.1:9099/webhook
     #   WEBHOOK_SECRET=<the same value as WEBHOOK_SECRET below>
 """
@@ -23,12 +23,12 @@ from fastapi import FastAPI, HTTPException, Request
 # of band between the two systems, never sent over the wire itself.
 WEBHOOK_SECRET = "replace-with-the-real-shared-secret"
 
-app = FastAPI(title="databridge webhook receiver (example)")
+app = FastAPI(title="tidybridge webhook receiver (example)")
 
 
 def verify_signature(body: bytes, signature_header: str | None) -> None:
     """Recomputes the HMAC over the raw body actually received and
-    compares it to the header - the same thing databridge does when
+    compares it to the header - the same thing tidybridge does when
     sending, so a mismatch means either the wrong secret or the body was
     altered in transit. hmac.compare_digest, not `==`, so the comparison
     itself doesn't leak timing information about how much of the
@@ -44,7 +44,7 @@ def verify_signature(body: bytes, signature_header: str | None) -> None:
 @app.post("/webhook")
 async def receive_webhook(request: Request) -> dict:
     body = await request.body()
-    verify_signature(body, request.headers.get("X-Databridge-Signature-256"))
+    verify_signature(body, request.headers.get("X-Tidybridge-Signature-256"))
 
     payload = await request.json()
     print(f"Verified event: {payload['event']} for record {payload['record']['id']}")

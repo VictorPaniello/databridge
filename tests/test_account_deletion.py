@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from databridge.models import ClientRecord, IngestionRun, WebhookDelivery
+from tidybridge.models import ClientRecord, IngestionRun, WebhookDelivery
 
 FIXTURES = Path(__file__).parent.parent / "examples"
 
@@ -33,7 +33,7 @@ def test_delete_own_account_returns_204_and_self_invalidates_the_token(client: T
 
 
 def test_delete_own_account_requires_authentication():
-    from databridge.main import app
+    from tidybridge.main import app
 
     unauthenticated = TestClient(app)
     assert unauthenticated.delete("/users/me").status_code == 401

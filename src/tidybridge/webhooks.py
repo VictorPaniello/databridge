@@ -26,8 +26,8 @@ import uuid
 import httpx
 from sqlalchemy.orm import Session
 
-from databridge.config import settings
-from databridge.models import ClientRecord, WebhookDelivery, WebhookJob
+from tidybridge.config import settings
+from tidybridge.models import ClientRecord, WebhookDelivery, WebhookJob
 
 TIMEOUT_SECONDS = 5.0
 
@@ -45,7 +45,7 @@ def sign_payload(body: bytes, secret: str) -> str:
     payload dict - the receiver must be able to verify the signature
     against the literal request body it received, the same pattern Stripe
     and GitHub use for their webhooks. Previously this sent the raw secret
-    itself as a header value (X-Databridge-Secret) - a weaker design: it
+    itself as a header value (X-Tidybridge-Secret) - a weaker design: it
     puts the actual secret on the wire on every delivery instead of only
     ever using it locally to compute/verify a signature, and gives a
     receiver no way to confirm the body wasn't tampered with in transit."""
@@ -82,7 +82,7 @@ def deliver_attempt(
 
     headers = {"Content-Type": "application/json"}
     if settings.webhook_secret:
-        headers["X-Databridge-Signature-256"] = sign_payload(body, settings.webhook_secret)
+        headers["X-Tidybridge-Signature-256"] = sign_payload(body, settings.webhook_secret)
 
     delivery = WebhookDelivery(
         record_id=record.id,
