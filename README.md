@@ -44,6 +44,7 @@ company/client parameter, but because each `ClientRecord` has an
 | `GET` | `/ingestion-runs` | List **your own** past uploads, paginated - the persisted summary of every upload, not just the one the last `IngestResult` response reported |
 | `GET` | `/ingestion-runs/{id}` | Fetch one of **your own** past uploads - 404 (not 403) otherwise |
 | `GET` | `/records` | List **your own** records, paginated (`?limit=&offset=`, `limit` capped server-side at 500), optionally `?has_issues=true/false` and/or `?ingestion_run_id=` (drill from one upload into exactly the records it created); returns `{items, total, limit, offset}` |
+| `GET` | `/records/export` | Download **your own** records as a CSV file (`Content-Disposition: attachment`), optionally `?ingestion_run_id=` to export just one upload - unpaginated, unlike `GET /records`, since the point is getting everything out in one file. Same ownership rules; includes an `issues` column summarizing any validation problems |
 | `GET` | `/records/{id}` | Fetch one of **your own** records - 404 (not 403) if it belongs to someone else, or doesn't exist |
 | `GET` | `/records/{id}/webhooks` | Audit log of webhook delivery attempts for one of your own records |
 | `POST` | `/records/{id}/webhooks/replay` | Manually re-send the notification for one of your own records, on demand - 400 if no `WEBHOOK_URL` is configured |

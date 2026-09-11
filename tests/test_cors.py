@@ -32,3 +32,14 @@ def test_preflight_from_an_unrelated_origin_is_not_allowed():
         },
     )
     assert "access-control-allow-origin" not in response.headers
+
+
+def test_content_disposition_is_exposed_to_cross_origin_javascript():
+    """Content-Disposition isn't on the browser's default CORS-safelisted
+    response headers - without allow_headers' expose_headers explicitly
+    naming it, exportRecords() (api/client.ts) could read the response
+    body fine but never see the filename the backend generated, silently
+    falling back to a generic one instead."""
+    client = TestClient(app)
+    response = client.get("/health", headers={"Origin": settings.frontend_url})
+    assert "content-disposition" in response.headers["access-control-expose-headers"].lower()

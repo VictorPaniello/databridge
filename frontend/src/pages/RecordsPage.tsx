@@ -120,6 +120,8 @@ export function RecordsPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<IngestResult | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetched once, unfiltered (beyond an optional ?ingestion_run_id= from
@@ -198,6 +200,18 @@ export function RecordsPage() {
     }
   }
 
+  async function handleExport() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await api.exportRecords(ingestionRunId ?? undefined);
+    } catch (err) {
+      setExportError(err instanceof ApiError ? err.message : "Export failed.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function confirmDelete() {
     if (!pendingDeleteId) return;
     const id = pendingDeleteId;
@@ -215,7 +229,14 @@ export function RecordsPage() {
       {user && <p className="text-lg text-muted-foreground mb-1">{greeting(user)}</p>}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Client records</h1>
-        <div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleExport}
+            disabled={exporting || records.length === 0}
+            className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-secondary transition disabled:opacity-50"
+          >
+            {exporting ? "Exporting…" : "Export CSV"}
+          </button>
           <input
             ref={fileInputRef}
             type="file"
@@ -232,6 +253,12 @@ export function RecordsPage() {
           </button>
         </div>
       </div>
+
+      {exportError && (
+        <div className="mb-4 rounded-md border border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-900 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+          {exportError}
+        </div>
+      )}
 
       {ingestionRunId && (
         <div className="mb-4 flex items-center justify-between rounded-md border border-border bg-secondary/50 px-4 py-2 text-sm">

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import logging
 import uuid
+from datetime import UTC, datetime
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -92,6 +95,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Content-Disposition isn't on the browser's default CORS-safelisted
+    # response headers - without exposing it explicitly, the frontend's
+    # fetch() for GET /records/export can't read the filename the backend
+    # generated (see api/client.ts's exportRecords()), even though the
+    # response itself comes through fine either way.
+    expose_headers=["Content-Disposition"],
 )
 
 # Rate limiting: a generous default across the whole API as a general flood
@@ -360,6 +369,63 @@ def list_records(
         total=total,
         limit=limit,
         offset=offset,
+    )
+
+
+def _format_issues(issues: list[dict] | None) -> str:
+    """One readable line per validation issue - "field: issue; field:
+    issue" - rather than the raw JSON GET /records/{id} returns, since
+    this is meant to be opened directly in a spreadsheet."""
+    if not issues:
+        return ""
+    return "; ".join(f"{issue['field']}: {issue['issue']}" for issue in issues)
+
+
+# Registered before GET /records/{record_id} - the literal "export" path
+# would otherwise be shadowed by {record_id} trying (and failing) to
+# parse it as a UUID, the exact class of routing-shadow bug this project
+# has hit before (see README's Bugs section, and DELETE /users/me above).
+@app.get("/records/export")
+def export_records(
+    ingestion_run_id: uuid.UUID | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_active_user),
+) -> Response:
+    """A CSV download of every one of the caller's own records matching
+    the filter - not the paginated JSON GET /records returns, since the
+    whole point of exporting is getting everything out in one file, not
+    a page at a time. Same ownership/filter semantics as GET /records
+    (see its own comments) - just unpaginated and shaped as CSV instead
+    of JSON."""
+    base_query = select(ClientRecord).where(ClientRecord.owner_id == user.id)
+    if ingestion_run_id is not None:
+        base_query = base_query.where(ClientRecord.ingestion_run_id == ingestion_run_id)
+    records = db.execute(base_query.order_by(ClientRecord.created_at.desc())).scalars().all()
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        ["full_name", "email", "signup_date", "amount", "phone", "has_issues", "issues"]
+    )
+    for record in records:
+        writer.writerow(
+            [
+                record.full_name,
+                record.email,
+                record.signup_date,
+                record.amount,
+                record.phone,
+                record.has_issues,
+                _format_issues(record.issues),
+            ]
+        )
+
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    filename = f"databridge-records-{timestamp}.csv"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
