@@ -321,11 +321,15 @@ generic template - see `frontend/src/pages/PrivacyPage.tsx` and
 `TermsPage.tsx`. Both pages carry their own disclaimer: good-faith and
 technically accurate, not a substitute for independent legal review.
 
-Data retention is documented exactly as the code behaves: indefinite
-until you delete it yourself (an individual record, or your whole
-account via `DELETE /users/me` above) - there's no automatic expiry.
-Deliberately honest rather than promising a policy that isn't
-implemented.
+Data retention is documented exactly as the code behaves: client data
+(what you upload about your own clients) is kept for up to a year, then
+deleted automatically - see [Data retention](#data-retention) below for
+the real, scheduled job that enforces it, not just a policy statement.
+An individual client record can also be deleted any time before that
+(`DELETE /records/{id}`). Your own account (email, name, phone,
+password) is kept until you delete it yourself (`DELETE /users/me`
+above) - the year-long window applies only to client data, never to
+your account.
 
 ## Deployment
 
@@ -388,6 +392,47 @@ Railway Cron Schedule service on demand ("Run now") and read its deploy
 logs, confirming it dumped the real production database to a real file on
 the real mounted Volume (`Dumping database to
 /data/backups/databridge-backup-<timestamp>.dump...` / `Dump complete`).
+
+## Data retention
+
+Client data - what an engineer uploads about their own clients, not the
+engineer's own account - is kept for `CLIENT_DATA_RETENTION_DAYS`
+(default 365) after it's ingested, then deleted automatically.
+`scripts/retention_sweep.py` (logic in `src/databridge/retention.py`)
+deletes every `IngestionRun` older than the window in one statement - the
+`ON DELETE CASCADE` on `ClientRecord`/`WebhookDelivery`'s foreign keys
+(added by migration `e986a7123298`, for `DELETE /users/me`'s cascading
+account erasure - see the API table above) takes its client records and
+their webhook delivery history with it in the same database operation,
+not a separate per-table pass. Also deletes
+any `ClientRecord` past the window with no `ingestion_run_id` at all
+(predates that column, so there's no run to cascade from) directly, so a
+record's age decides its fate regardless of when the run-linking feature
+shipped relative to it.
+
+**Deliberately scoped to client data only** - an engineer's own account
+(email, name, phone, password) is never touched by this job, no matter
+how old or inactive; only `DELETE /users/me` removes that, on the
+account holder's own request. The [Privacy Policy](#privacy--terms)
+reflects exactly this: client data retained up to a year, account data
+retained until you delete it yourself.
+
+Same pattern as Backups above - a scheduled Railway service, same repo/
+image, `python scripts/retention_sweep.py` as its Custom Start Command,
+a daily Cron Schedule, the same `DATABASE_URL` reference. No Volume
+needed (nothing is written to disk, only deleted from the database).
+
+Verified against a real Postgres test database, not mocks
+(`tests/test_retention.py`): a run backdated past the window is deleted
+and its cascade actually removes the client records and webhook
+deliveries it owned (checked directly via the database, not just the
+function's return value); a recent run is left alone; an orphaned
+record with no `ingestion_run_id` is caught by the direct pass; the
+owning user account survives untouched; a custom retention window
+(monkeypatched shorter than the 365-day default) is respected. Setting
+up the actual Railway Cron Schedule service for this (mirroring
+Backups' setup above) is a deployment step, not something exercised by
+the test suite.
 
 ## Bugs found while building this
 

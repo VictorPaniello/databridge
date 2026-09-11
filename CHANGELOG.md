@@ -7,6 +7,30 @@ nothing has been tagged as a release yet, so everything below is under
 ## [Unreleased]
 
 ### Added
+- **Automated client-data retention.** The Privacy Policy previously
+  promised client data (what an engineer uploads about their own
+  clients) is kept indefinitely, with no expiry - now it's kept for up
+  to `CLIENT_DATA_RETENTION_DAYS` (default 365), then deleted for real
+  by a scheduled job. `scripts/retention_sweep.py`
+  (`src/databridge/retention.py`) deletes every `IngestionRun` past the
+  window in one statement - `ON DELETE CASCADE` (added for `DELETE
+  /users/me`, see below) takes its `ClientRecord`s and their
+  `WebhookDelivery` history with it in the same database operation -
+  plus any orphaned `ClientRecord` with no `ingestion_run_id` (predates
+  that column) directly, so a record's age decides its fate regardless
+  of when run-linking shipped relative to it. Deliberately scoped to
+  client data only: an engineer's own account is never touched by this
+  job, no matter how old or inactive - only `DELETE /users/me`
+  (self-initiated) removes that. Same operational pattern as the
+  existing Backups service: a scheduled Railway service, same repo/
+  image, daily Cron Schedule, no Volume needed since nothing is written
+  to disk. Verified against a real Postgres test database
+  (`tests/test_retention.py`, 5 tests): a backdated run is deleted and
+  its cascade actually removes the client records and webhook
+  deliveries it owned (checked directly via the database); a recent run
+  is left alone; an orphaned record is caught by the direct pass; the
+  owning user account survives; a custom (monkeypatched) retention
+  window is respected.
 - **Accessibility fixes, found via real computed WCAG contrast ratios,
   not assumed from "it's a standard Tailwind color."** Several
   light-mode text/UI colors measured below the required minimums:

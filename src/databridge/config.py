@@ -105,6 +105,13 @@ class Settings(BaseSettings):
     the volume doesn't grow forever - not a substitute for actual
     point-in-time recovery, just bounding how much history is kept."""
 
+    client_data_retention_days: int = 365
+    """scripts/retention_sweep.py deletes IngestionRun and ClientRecord
+    rows older than this, on every run - see README's "Data retention"
+    section. Applies only to client data (what an engineer uploads about
+    their own clients), not to an engineer's own account, which is kept
+    until they delete it themselves (DELETE /users/me)."""
+
     resend_api_key: str | None = None
     """Resend (resend.dev) API key, used by auth.py's UserManager to send
     forgot-password emails. None disables real delivery - the reset link
