@@ -11,7 +11,7 @@ import io
 
 from fastapi.testclient import TestClient
 
-from databridge.main import app
+from tidybridge.main import app
 
 CLEAN_AND_FLAGGED_CSV = (
     "Customer,Contact Email,Order Date,Order Total,Mobile Number\n"

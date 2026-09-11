@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from databridge.main import app
+from tidybridge.main import app
 
 FIXTURES = Path(__file__).parent.parent / "examples"
 
@@ -145,7 +145,7 @@ def test_upload_exceeding_size_limit_is_rejected(client: TestClient, monkeypatch
     # A tiny limit for this test only, so it doesn't need to build a real
     # multi-MB file to prove the chunked reader actually cuts off uploads -
     # it exercises the same code path a real oversized file would hit.
-    import databridge.main as main_module
+    import tidybridge.main as main_module
 
     monkeypatch.setattr(main_module, "_MAX_UPLOAD_BYTES", 100)
     oversized = b"a" * 200
@@ -197,7 +197,7 @@ def test_delete_record_actually_removes_it(client: TestClient):
 def test_delete_record_cascades_to_its_webhook_deliveries(client: TestClient, db):
     from sqlalchemy import select
 
-    from databridge.models import WebhookDelivery
+    from tidybridge.models import WebhookDelivery
 
     record_id = _upload(client).json()["records"][0]["id"]
     db.add(

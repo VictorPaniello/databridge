@@ -16,7 +16,7 @@ export function PrivacyPage() {
 
       <Section title="Who's responsible for your data">
         <p>
-          databridge is an independent project built and operated by Victor Paniello, based in
+          tidybridge is an independent project built and operated by Victor Paniello, based in
           Barcelona, Spain. There is no separate registered company - Victor is the data
           controller (and, for the client data you upload, your data processor - see below) for
           personal data processed through this service.
@@ -58,13 +58,13 @@ export function PrivacyPage() {
           The core purpose of this tool is letting you upload a CSV/Excel export of your own
           clients and have it cleaned and stored. That export can contain your clients' name,
           email, phone, signup date, and a monetary amount - real personal data about real people
-          who never interacted with databridge directly and have no account here.
+          who never interacted with tidybridge directly and have no account here.
         </p>
         <p className="mt-2">
-          <strong>For this data, you are the controller, not databridge.</strong> By uploading a
+          <strong>For this data, you are the controller, not tidybridge.</strong> By uploading a
           file, you confirm you have a lawful basis of your own (a contract with that client, their
           consent, or another valid basis under applicable law) to process and share their data
-          this way. databridge acts as your <strong>data processor</strong> for this category only
+          this way. tidybridge acts as your <strong>data processor</strong> for this category only
           - storing and, if you configure a webhook, forwarding it on your behalf, on your
           instructions.
         </p>
@@ -73,7 +73,7 @@ export function PrivacyPage() {
         <ul className="list-disc pl-5 space-y-1">
           <li>
             A login token and your light/dark theme preference, stored in your browser's
-            localStorage - never sent to databridge except as the token itself, on requests you
+            localStorage - never sent to tidybridge except as the token itself, on requests you
             make.
           </li>
           <li>
@@ -124,7 +124,7 @@ export function PrivacyPage() {
           <li>
             <strong>A webhook URL you configure yourself</strong> (optional, self-hosted setups
             only) - if set, the data of each newly-ingested client record is sent there. This is
-            your own destination, under your own control, not a databridge-operated third party.
+            your own destination, under your own control, not a tidybridge-operated third party.
           </li>
         </ul>
         <p className="mt-2">

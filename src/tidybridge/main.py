@@ -1,4 +1,4 @@
-"""databridge API."""
+"""tidybridge API."""
 
 from __future__ import annotations
 
@@ -21,8 +21,8 @@ from starlette.concurrency import run_in_threadpool
 # Registers users/oauth_account on Base.metadata - not used directly here,
 # but tests' create_all() (see conftest.py) needs every table module
 # imported somewhere in this chain to know about them.
-import databridge.auth_models  # noqa: F401
-from databridge.auth import (
+import tidybridge.auth_models  # noqa: F401
+from tidybridge.auth import (
     UserCreate,
     UserRead,
     UserUpdate,
@@ -34,12 +34,12 @@ from databridge.auth import (
     make_github_authorize_redirect,
     oauth_redirect_backend,
 )
-from databridge.auth_models import User
-from databridge.config import settings
-from databridge.db import get_db
-from databridge.ingest import ingest_file, load_schema
-from databridge.models import ClientRecord, IngestionRun, WebhookDelivery, WebhookJob
-from databridge.schemas import (
+from tidybridge.auth_models import User
+from tidybridge.config import settings
+from tidybridge.db import get_db
+from tidybridge.ingest import ingest_file, load_schema
+from tidybridge.models import ClientRecord, IngestionRun, WebhookDelivery, WebhookJob
+from tidybridge.schemas import (
     ClientRecordOut,
     IngestionRunOut,
     IngestionRunsPage,
@@ -48,11 +48,11 @@ from databridge.schemas import (
     WebhookDeliveryOut,
     WebhookJobStatusOut,
 )
-from databridge.webhooks import notify_new_record
+from tidybridge.webhooks import notify_new_record
 
 # Nothing else in this process configures logging - Python's root logger
 # defaults to WARNING with zero handlers attached, so a plain
-# logger.info(...) anywhere under the "databridge" namespace (auth.py's
+# logger.info(...) anywhere under the "tidybridge" namespace (auth.py's
 # password-reset logging, notably) would be silently discarded at the
 # effective-level check before it ever reached output, in both `uvicorn
 # --reload` locally and the real Dockerfile CMD on Railway - found by
@@ -62,10 +62,10 @@ from databridge.webhooks import notify_new_record
 # "uvicorn"/"uvicorn.access" loggers, so this app's own logger needs its
 # own explicit level + handler; propagate=False keeps it from also
 # duplicating through root if root ever gets a handler configured later.
-_databridge_logger = logging.getLogger("databridge")
-_databridge_logger.setLevel(logging.INFO)
-_databridge_logger.addHandler(logging.StreamHandler())
-_databridge_logger.propagate = False
+_tidybridge_logger = logging.getLogger("tidybridge")
+_tidybridge_logger.setLevel(logging.INFO)
+_tidybridge_logger.addHandler(logging.StreamHandler())
+_tidybridge_logger.propagate = False
 
 # Schema is Alembic-managed now (see alembic/), not created on startup -
 # `alembic upgrade head` runs before the app starts (Dockerfile's CMD;
@@ -79,7 +79,7 @@ _databridge_logger.propagate = False
 # why: not a security boundary, just no reason to leave the whole API
 # schema publicly browsable once this is actually live.
 app = FastAPI(
-    title="databridge",
+    title="tidybridge",
     docs_url="/docs" if settings.enable_api_docs else None,
     redoc_url="/redoc" if settings.enable_api_docs else None,
     openapi_url="/openapi.json" if settings.enable_api_docs else None,
@@ -421,7 +421,7 @@ def export_records(
         )
 
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    filename = f"databridge-records-{timestamp}.csv"
+    filename = f"tidybridge-records-{timestamp}.csv"
     return Response(
         content=buffer.getvalue(),
         media_type="text/csv",

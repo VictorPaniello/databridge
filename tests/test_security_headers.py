@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from databridge.main import app
+from tidybridge.main import app
 
 
 def test_every_response_carries_the_security_headers():

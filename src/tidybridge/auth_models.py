@@ -1,6 +1,6 @@
 """User identity tables.
 
-Kept separate from models.py (which holds databridge's own domain
+Kept separate from models.py (which holds tidybridge's own domain
 tables) because these are fastapi-users' tables - id, email, hashed
 password, active/verified flags, and linked OAuth accounts (e.g. GitHub)
 are all managed by that library, not hand-rolled here."""
@@ -14,7 +14,7 @@ from fastapi_users_db_sqlalchemy.generics import GUID
 from sqlalchemy import Boolean, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from databridge.db import Base
+from tidybridge.db import Base
 
 
 class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):

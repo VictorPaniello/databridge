@@ -1,5 +1,5 @@
 """Test fixtures. Tests run against a real PostgreSQL database
-(databridge_test), not a mock or an in-memory substitute - the whole point
+(tidybridge_test), not a mock or an in-memory substitute - the whole point
 of this project is proving the ingest -> Postgres -> API path actually
 works, and an in-memory fake DB would silently hide anything SQLAlchemy or
 Postgres itself does differently from an assumption baked into a mock."""
@@ -10,7 +10,7 @@ import os
 import uuid
 
 os.environ.setdefault(
-    "DATABASE_URL", "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/databridge_test"
+    "DATABASE_URL", "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/tidybridge_test"
 )
 os.environ.setdefault("WEBHOOK_URL", "")  # no webhook during tests - keep them hermetic
 
@@ -20,9 +20,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-import databridge.auth_models  # noqa: F401 - registers users/oauth_account on Base.metadata
-from databridge.db import SessionLocal, engine, get_db
-from databridge.main import app, limiter
+import tidybridge.auth_models  # noqa: F401 - registers users/oauth_account on Base.metadata
+from tidybridge.db import SessionLocal, engine, get_db
+from tidybridge.main import app, limiter
 
 # The real strict rate limit on /auth/register and /auth/jwt/login (see
 # main.py) would otherwise reject most of this suite - almost every test

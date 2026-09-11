@@ -23,9 +23,9 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from databridge.config import settings
-from databridge.models import ClientRecord, WebhookJob
-from databridge.webhooks import _backoff_seconds, deliver_attempt
+from tidybridge.config import settings
+from tidybridge.models import ClientRecord, WebhookJob
+from tidybridge.webhooks import _backoff_seconds, deliver_attempt
 
 
 def process_due_jobs(db: Session, limit: int = 20) -> int:

@@ -31,9 +31,9 @@ from fastapi_users.schemas import BaseUser, BaseUserCreate, BaseUserUpdate
 from httpx_oauth.clients.github import GitHubOAuth2
 from pydantic import EmailStr, Field
 
-from databridge.auth_db import get_user_db
-from databridge.auth_models import User
-from databridge.config import settings
+from tidybridge.auth_db import get_user_db
+from tidybridge.auth_models import User
+from tidybridge.config import settings
 
 MIN_PASSWORD_LENGTH = 8
 
@@ -169,8 +169,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         reset_url = f"{settings.frontend_url}/reset-password?token={token}"
         await _send_email(
             user.email,
-            "Reset your databridge password",
-            "<p>Someone requested a password reset for your databridge "
+            "Reset your tidybridge password",
+            "<p>Someone requested a password reset for your tidybridge "
             "account.</p>"
             f'<p><a href="{reset_url}">Reset your password</a></p>'
             "<p>This link expires in 1 hour and can only be used once. If "
@@ -280,7 +280,7 @@ fastapi_users = FastAPIUsers[User, uuid.UUID](get_user_manager, [auth_backend])
 current_active_user = fastapi_users.current_user(active=True)
 # Doesn't 401 on a missing/invalid token - returns None instead. Used where
 # an endpoint should still work for anyone, but personalize its response
-# for a signed-in engineer (none of databridge's endpoints use this yet).
+# for a signed-in engineer (none of tidybridge's endpoints use this yet).
 current_active_user_optional = fastapi_users.current_user(active=True, optional=True)
 
 

@@ -8,16 +8,16 @@ from alembic import context
 # Import every module that defines a table, so they all register on
 # Base.metadata before target_metadata is read below - the same reason
 # main.py imports auth_models even though nothing there calls it directly.
-import databridge.auth_models  # noqa: E402,F401
-import databridge.models  # noqa: E402,F401
-from databridge.config import settings  # noqa: E402
-from databridge.db import Base  # noqa: E402
+import tidybridge.auth_models  # noqa: E402,F401
+import tidybridge.models  # noqa: E402,F401
+from tidybridge.config import settings  # noqa: E402
+from tidybridge.db import Base  # noqa: E402
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
-# The real DATABASE_URL comes from databridge's own Settings (env vars),
+# The real DATABASE_URL comes from tidybridge's own Settings (env vars),
 # never from alembic.ini - keeps secrets out of a file that gets committed.
 config.set_main_option("sqlalchemy.url", settings.database_url)
 

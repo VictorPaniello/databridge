@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Entrypoint for the scheduled client-data-retention service - see
-databridge.retention for the actual logic and databridge/README.md's
+tidybridge.retention for the actual logic and tidybridge/README.md's
 "Data retention" section for how this gets run on a schedule in Railway.
 
 Run manually: python scripts/retention_sweep.py
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sys
 
-from databridge.retention import run
+from tidybridge.retention import run
 
 if __name__ == "__main__":
     try:

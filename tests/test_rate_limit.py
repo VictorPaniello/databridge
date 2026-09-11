@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from databridge.main import app, limiter
+from tidybridge.main import app, limiter
 
 
 def test_login_is_rate_limited_after_repeated_attempts():

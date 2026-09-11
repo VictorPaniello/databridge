@@ -10,7 +10,7 @@ import type {
 } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL;
-const TOKEN_KEY = "databridge_token";
+const TOKEN_KEY = "tidybridge_token";
 
 // A plain module-level variable, not React state - the API client has no
 // business knowing about React. AuthContext reads/writes it and is the
@@ -315,7 +315,7 @@ export async function exportRecords(ingestionRunId?: string): Promise<void> {
   // CORS expose_headers config that makes this readable cross-origin)
   // rather than making up a second one here.
   const disposition = response.headers.get("content-disposition") ?? "";
-  const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? "databridge-records.csv";
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? "tidybridge-records.csv";
 
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

@@ -12,9 +12,9 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 
-from databridge.auth_models import User
-from databridge.models import ClientRecord, IngestionRun, WebhookDelivery
-from databridge.retention import sweep_expired_client_data
+from tidybridge.auth_models import User
+from tidybridge.models import ClientRecord, IngestionRun, WebhookDelivery
+from tidybridge.retention import sweep_expired_client_data
 
 FIXTURES = Path(__file__).parent.parent / "examples"
 
@@ -122,7 +122,7 @@ def test_sweep_never_touches_the_owning_user_account(client: TestClient, db):
 
 
 def test_sweep_respects_a_custom_retention_window(client: TestClient, db, monkeypatch):
-    import databridge.config as config_module
+    import tidybridge.config as config_module
 
     monkeypatch.setattr(config_module.settings, "client_data_retention_days", 30)
 

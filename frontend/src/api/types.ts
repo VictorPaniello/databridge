@@ -1,4 +1,4 @@
-// Mirrors databridge/schemas.py and auth.py's UserRead - kept hand-in-sync
+// Mirrors tidybridge/schemas.py and auth.py's UserRead - kept hand-in-sync
 // with the backend since this is a small, single-frontend project, not
 // generated from an OpenAPI spec.
 

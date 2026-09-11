@@ -13,7 +13,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/databridge"
+    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/tidybridge"
 
     @field_validator("database_url")
     @classmethod
@@ -118,7 +118,7 @@ class Settings(BaseSettings):
     is logged instead (see _send_email in auth.py), which is fine for
     local dev but must be set in production or nobody can actually
     receive one."""
-    email_from: str = "databridge <onboarding@resend.dev>"
+    email_from: str = "tidybridge <onboarding@resend.dev>"
     """Resend's shared onboarding@resend.dev sender - works without
     verifying a custom domain, but ONLY to the Resend account's own
     email address (confirmed against real production sends: a plain

@@ -24,9 +24,9 @@ from sqlalchemy.orm import Session
 from tidycsv.cleaner import coerce_and_validate, flag_duplicates, load_input, map_columns
 from tidycsv.schema import Schema
 
-from databridge.config import settings
-from databridge.models import ClientRecord, IngestionRun
-from databridge.webhooks import enqueue_delivery
+from tidybridge.config import settings
+from tidybridge.models import ClientRecord, IngestionRun
+from tidybridge.webhooks import enqueue_delivery
 
 
 def load_schema() -> Schema:

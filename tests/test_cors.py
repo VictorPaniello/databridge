@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from databridge.config import settings
-from databridge.main import app
+from tidybridge.config import settings
+from tidybridge.main import app
 
 
 def test_preflight_from_the_configured_frontend_origin_is_allowed():

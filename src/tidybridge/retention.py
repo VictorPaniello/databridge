@@ -20,9 +20,9 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from databridge.config import settings
-from databridge.db import SessionLocal
-from databridge.models import ClientRecord, IngestionRun
+from tidybridge.config import settings
+from tidybridge.db import SessionLocal
+from tidybridge.models import ClientRecord, IngestionRun
 
 
 def sweep_expired_client_data(db: Session) -> dict[str, int]:

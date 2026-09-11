@@ -26,7 +26,7 @@ def _fake_resend(monkeypatch):
     making a real network call - captures each outgoing send in `sent`
     (a list of the JSON bodies httpx.AsyncClient.post was called with) so
     a test can pull the reset link out of the html it was about to mail."""
-    from databridge.config import settings
+    from tidybridge.config import settings
 
     monkeypatch.setattr(settings, "resend_api_key", "re_test_fake_key")
     sent: list[dict] = []
@@ -68,7 +68,7 @@ def test_forgot_password_on_unregistered_email_sends_nothing(_fake_resend):
     generated) for an address nobody registered - the generic 202 either
     way is what stops this endpoint from being usable to find out which
     emails are registered. See main.py's rate-limit comment."""
-    from databridge.main import app
+    from tidybridge.main import app
 
     client = TestClient(app)
     resp = client.post(
@@ -80,7 +80,7 @@ def test_forgot_password_on_unregistered_email_sends_nothing(_fake_resend):
 
 
 def test_forgot_password_on_password_account_reports_oauth_only_false(_fake_resend):
-    from databridge.main import app
+    from tidybridge.main import app
 
     client = TestClient(app)
     email = f"has-password-{uuid.uuid4()}@example.com"
@@ -100,8 +100,8 @@ def test_forgot_password_on_oauth_only_account_sends_nothing(_fake_resend, db):
     driving a real GitHub handshake, the same choice
     test_oauth_redirect.py's own comment explains for not re-testing that
     handshake here."""
-    from databridge.auth_models import User
-    from databridge.main import app
+    from tidybridge.auth_models import User
+    from tidybridge.main import app
 
     client = TestClient(app)
     email = f"oauth-only-{uuid.uuid4()}@example.com"
@@ -118,7 +118,7 @@ def test_forgot_password_on_oauth_only_account_sends_nothing(_fake_resend, db):
 
 
 def test_reset_password_with_valid_token_changes_the_password(_fake_resend):
-    from databridge.main import app
+    from tidybridge.main import app
 
     client = TestClient(app)
     email = f"reset-{uuid.uuid4()}@example.com"
@@ -147,7 +147,7 @@ def test_reset_password_with_valid_token_changes_the_password(_fake_resend):
 
 
 def test_reset_password_with_invalid_token_is_rejected():
-    from databridge.main import app
+    from tidybridge.main import app
 
     client = TestClient(app)
     resp = client.post(
@@ -163,7 +163,7 @@ def test_reset_password_token_cannot_be_reused_after_a_successful_reset(_fake_re
     moment the password actually changes - no separate single-use
     bookkeeping needed. Covers replaying an old reset email/link after
     it's already been used once."""
-    from databridge.main import app
+    from tidybridge.main import app
 
     client = TestClient(app)
     email = f"reuse-{uuid.uuid4()}@example.com"
@@ -186,7 +186,7 @@ def test_reset_password_still_enforces_the_password_policy(_fake_resend):
     """UserManager.validate_password (test_password_policy.py covers it on
     registration) is a shared override - fastapi-users calls it on this
     path too, not just on /auth/register."""
-    from databridge.main import app
+    from tidybridge.main import app
 
     client = TestClient(app)
     email = f"weak-reset-{uuid.uuid4()}@example.com"
@@ -202,8 +202,8 @@ def test_forgot_password_falls_back_to_logging_when_no_provider_configured(monke
     """The no-RESEND_API_KEY dev fallback (config.py's resend_api_key
     docstring) - separate from every other test in this file, which
     configures a fake key via the autouse fixture above."""
-    from databridge.config import settings
-    from databridge.main import app
+    from tidybridge.config import settings
+    from tidybridge.main import app
 
     monkeypatch.setattr(settings, "resend_api_key", None)
 
@@ -221,7 +221,7 @@ def test_forgot_password_falls_back_to_logging_when_no_provider_configured(monke
 
 
 def test_forgot_password_endpoint_is_rate_limited_after_repeated_attempts(_fake_resend):
-    from databridge.main import app, limiter
+    from tidybridge.main import app, limiter
 
     # Registered with the limiter still off - only /auth/forgot-password's
     # own quota is under test here. Doing this inside the enabled block
