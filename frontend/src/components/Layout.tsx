@@ -17,7 +17,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <header className="border-b border-border">
         <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between">
           <Link to="/" className="font-semibold tracking-tight">
-            data<span className="text-ring">bridge</span>
+            tidy<span className="text-ring">bridge</span>
           </Link>
           <div className="flex items-center gap-4 text-sm">
             {user && (
