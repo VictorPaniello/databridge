@@ -53,7 +53,7 @@ def process_due_jobs(db: Session, limit: int = 20) -> int:
         # to be deleted right along with the record it points at.
         record = db.get(ClientRecord, job.record_id)
 
-        delivery = deliver_attempt(db, record, job.attempt_number)
+        delivery = deliver_attempt(db, record, job.attempt_number, job.idempotency_key)
         if delivery.success:
             job.status = "done"
         elif job.attempt_number >= settings.webhook_max_attempts:

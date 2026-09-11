@@ -21,6 +21,7 @@ import hashlib
 import hmac
 import json
 import time
+import uuid
 
 import httpx
 from sqlalchemy.orm import Session
@@ -52,16 +53,20 @@ def sign_payload(body: bytes, secret: str) -> str:
     return f"sha256={digest}"
 
 
-def deliver_attempt(db: Session, record: ClientRecord, attempt_number: int) -> WebhookDelivery:
+def deliver_attempt(
+    db: Session, record: ClientRecord, attempt_number: int, idempotency_key: uuid.UUID
+) -> WebhookDelivery:
     """One HTTP attempt: builds and signs the payload, POSTs it, persists
     and commits exactly one WebhookDelivery row recording the outcome.
+    idempotency_key is shared across every attempt of the same logical
+    notification (see WebhookDelivery/WebhookJob's docstrings in
+    models.py) - the caller decides what that value is, this function
+    just carries it through to both the payload and the audit row.
     Shared by notify_new_record()'s manual-replay retry loop below and
-    webhook_worker.py's process_due_jobs() - the only difference between
-    an automatic (queued) attempt and a replay's is who calls this and
-    how the next attempt (if any) gets scheduled, not what one attempt
-    itself does."""
+    webhook_worker.py's process_due_jobs()."""
     payload = {
         "event": "client_record.created",
+        "idempotency_key": str(idempotency_key),
         "record": {
             "id": str(record.id),
             "email": record.email,
@@ -80,7 +85,11 @@ def deliver_attempt(db: Session, record: ClientRecord, attempt_number: int) -> W
         headers["X-Databridge-Signature-256"] = sign_payload(body, settings.webhook_secret)
 
     delivery = WebhookDelivery(
-        record_id=record.id, url=settings.webhook_url, success=False, attempt_number=attempt_number
+        record_id=record.id,
+        url=settings.webhook_url,
+        success=False,
+        attempt_number=attempt_number,
+        idempotency_key=idempotency_key,
     )
     try:
         response = httpx.post(
@@ -119,13 +128,18 @@ def notify_new_record(db: Session, record: ClientRecord) -> WebhookDelivery | No
     enqueue_delivery() and the background worker instead (see
     webhook_worker.py). Kept synchronous deliberately: a replay is a
     human asking for an immediate resend mid-incident, not something that
-    should wait behind the queue's own poll interval."""
+    should wait behind the queue's own poll interval. Generates its own
+    idempotency_key, shared by every attempt of *this* replay's own
+    retry loop - deliberately different from the automatic delivery's
+    key, since a replay is a new, intentional resend a receiver should
+    process, not a duplicate to silently drop."""
     if not settings.webhook_url:
-        return None  # no receiver configured - nothing to do, not an error
+        return None
 
+    idempotency_key = uuid.uuid4()
     delivery: WebhookDelivery | None = None
     for attempt in range(1, settings.webhook_max_attempts + 1):
-        delivery = deliver_attempt(db, record, attempt)
+        delivery = deliver_attempt(db, record, attempt, idempotency_key)
         if delivery.success:
             return delivery
         if attempt < settings.webhook_max_attempts:
