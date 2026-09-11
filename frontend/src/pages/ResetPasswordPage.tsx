@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { resetPassword, ApiError } from "../api/client";
 import { ThemeToggle } from "../components/ThemeToggle";
-import { PASSWORD_RULES } from "../lib/passwordRules";
+import { PasswordRulesList } from "../components/PasswordRulesList";
 
 export function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -77,20 +77,7 @@ export function ResetPasswordPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-ring"
               />
-              {password && (
-                <ul className="mt-2 space-y-0.5 text-xs" aria-live="polite">
-                  {PASSWORD_RULES.map((rule) => {
-                    const met = rule.test(password);
-                    return (
-                      <li key={rule.label} className={met ? "text-primary" : "text-muted-foreground"}>
-                        <span aria-hidden="true">{met ? "✓" : "○"}</span>{" "}
-                        {rule.label}
-                        <span className="sr-only">{met ? " - met" : " - not met yet"}</span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+              {password && <PasswordRulesList password={password} />}
             </div>
 
             <div>

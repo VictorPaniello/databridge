@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { PhoneInput } from "../components/PhoneInput";
 import { COUNTRY_CODES } from "../data/countryCodes";
 
 // Reached only via ProtectedRoute redirecting a signed-in user with no
@@ -82,40 +83,12 @@ export function CompleteProfilePage() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1" htmlFor="phone">
-              Phone <span className="text-muted-foreground font-normal">(optional)</span>
-            </label>
-            <div className="flex gap-2">
-              <select
-                id="phone-country"
-                aria-label="Country code"
-                value={dialCode}
-                onChange={(e) => setDialCode(e.target.value)}
-                // bg-background/text-foreground (not bg-transparent): see
-                // the same select in RegisterPage.tsx for why.
-                className="w-28 shrink-0 rounded-md border border-input bg-background text-foreground px-2 py-2 outline-none focus:ring-2 focus:ring-ring"
-              >
-                {COUNTRY_CODES.map((c) => (
-                  <option
-                    key={c.iso2}
-                    value={c.dialCode}
-                    style={{ backgroundColor: "var(--background)", color: "var(--foreground)" }}
-                  >
-                    {c.iso2} {c.dialCode}
-                  </option>
-                ))}
-              </select>
-              <input
-                id="phone"
-                type="tel"
-                autoComplete="tel-national"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                className="w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-          </div>
+          <PhoneInput
+            dialCode={dialCode}
+            phoneNumber={phoneNumber}
+            onDialCodeChange={setDialCode}
+            onPhoneNumberChange={setPhoneNumber}
+          />
 
           <div className="flex items-start gap-2">
             <input
