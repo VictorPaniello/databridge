@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -275,3 +276,37 @@ def test_replay_respects_ownership(
 def test_replay_unknown_record_returns_404(client: TestClient, webhook_receiver):
     response = client.post("/records/00000000-0000-0000-0000-000000000000/webhooks/replay")
     assert response.status_code == 404
+
+
+def test_retries_of_the_same_job_share_one_idempotency_key(
+    client: TestClient, db: Session, flaky_webhook_receiver
+):
+    flaky_webhook_receiver.fail_first_n = 1  # fails once, then succeeds
+    record_id = _upload_single_row(client).json()["records"][0]["id"]
+    _drain_jobs(db)
+
+    deliveries = client.get(f"/records/{record_id}/webhooks").json()
+    assert len(deliveries) == 2
+    assert deliveries[0]["idempotency_key"] == deliveries[1]["idempotency_key"]
+
+
+def test_replay_gets_a_different_idempotency_key_than_the_automatic_delivery(
+    client: TestClient, db: Session, webhook_receiver
+):
+    record_id = _upload(client).json()["records"][0]["id"]
+    _drain_jobs(db)
+    original = client.get(f"/records/{record_id}/webhooks").json()[0]["idempotency_key"]
+
+    replay = client.post(f"/records/{record_id}/webhooks/replay").json()
+    assert replay["idempotency_key"] != original
+
+
+def test_idempotency_key_is_included_in_the_signed_payload(
+    client: TestClient, db: Session, webhook_receiver
+):
+    record_id = _upload(client).json()["records"][0]["id"]
+    _drain_jobs(db)
+
+    delivery = client.get(f"/records/{record_id}/webhooks").json()[0]
+    received_body = json.loads(webhook_receiver.received[0]["body"])
+    assert received_body["idempotency_key"] == delivery["idempotency_key"]

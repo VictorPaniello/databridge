@@ -36,6 +36,7 @@ class WebhookDeliveryOut(BaseModel):
     success: bool
     error: str | None
     attempt_number: int
+    idempotency_key: uuid.UUID
     attempted_at: datetime
 
 

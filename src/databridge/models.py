@@ -129,6 +129,13 @@ class WebhookDelivery(Base):
     up to Settings.webhook_max_attempts total). One row per attempt, not
     one row overwritten in place, so the audit trail shows the full
     retry history for a record, not just the final outcome."""
+    idempotency_key: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, default=uuid.uuid4
+    )
+    """Shared by every attempt of the same logical notification - every
+    retry of one webhook_jobs row (or one notify_new_record() replay
+    call) reuses the same value, so a receiver can dedupe at-least-once
+    delivery. See webhooks.py's deliver_attempt()."""
     attempted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -148,6 +155,13 @@ class WebhookJob(Base):
     __tablename__ = "webhook_jobs"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    idempotency_key: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, default=uuid.uuid4
+    )
+    """Generated once, at enqueue time - every attempt process_due_jobs()
+    makes for this job reuses this same value (passed into
+    deliver_attempt()), so retries of one job are recognizable as the
+    same logical notification, not independent ones."""
     record_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("client_records.id", ondelete="cascade"),
