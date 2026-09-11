@@ -26,7 +26,7 @@ from tidycsv.schema import Schema
 
 from databridge.config import settings
 from databridge.models import ClientRecord, IngestionRun
-from databridge.webhooks import notify_new_record
+from databridge.webhooks import enqueue_delivery
 
 
 def load_schema() -> Schema:
@@ -119,9 +119,13 @@ def ingest_file(
     run.rows_clean = len(inserted) - run.rows_flagged
     run.rows_skipped_existing = skipped_existing
 
-    db.commit()
-
+    # Enqueued in the same transaction as the run/records themselves, not
+    # after - a job only ever exists for a record that actually made it
+    # into the database, never an orphan left behind by a rolled-back
+    # ingest.
     for record in inserted:
-        notify_new_record(db, record)
+        enqueue_delivery(db, record)
+
+    db.commit()
 
     return inserted, run

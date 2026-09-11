@@ -3,12 +3,17 @@ request that triggered it - the record is already safely persisted by the
 time we attempt to notify anyone, so a network blip on the receiving end is
 the receiver's problem to retry, not a reason to roll back real data.
 
-Previously a single best-effort POST: one attempt, logged whether it
-succeeded or not, never tried again. A receiver's brief outage (a deploy,
-a cold start, a transient 5xx) meant the notification was simply lost.
-notify_new_record() now retries with exponential backoff, up to
-settings.webhook_max_attempts total tries, persisting one WebhookDelivery
-row per attempt so the audit trail shows the full retry history."""
+Two delivery paths, both ending in deliver_attempt() below:
+- Automatic (post-ingest): ingest.py calls enqueue_delivery() to create a
+  WebhookJob row; webhook_worker.py's process_due_jobs() claims and
+  delivers it later, off the request path, with retries scheduled via
+  the job's own available_at (see WebhookJob in models.py).
+- Manual replay (POST /records/{id}/webhooks/replay, main.py):
+  notify_new_record() runs its own retry loop synchronously, in the
+  request - a human asking for an immediate resend, not queued work.
+
+Both paths persist one WebhookDelivery row per attempt, so the audit
+trail shows the full retry history either way."""
 
 from __future__ import annotations
 
@@ -21,7 +26,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from databridge.config import settings
-from databridge.models import ClientRecord, WebhookDelivery
+from databridge.models import ClientRecord, WebhookDelivery, WebhookJob
 
 TIMEOUT_SECONDS = 5.0
 
@@ -91,6 +96,21 @@ def deliver_attempt(db: Session, record: ClientRecord, attempt_number: int) -> W
     db.add(delivery)
     db.commit()
     return delivery
+
+
+def enqueue_delivery(db: Session, record: ClientRecord) -> WebhookJob | None:
+    """Called once per newly-inserted record, right after ingest (see
+    ingest.py) - replaces what used to be a direct notify_new_record()
+    call. Just a fast DB insert, so a slow or dead receiver can never add
+    latency to POST /records/upload; the actual HTTP attempt happens
+    later, off the request path, in webhook_worker.py's
+    process_due_jobs()."""
+    if not settings.webhook_url:
+        return None  # no receiver configured - nothing to do, not an error
+    job = WebhookJob(record_id=record.id)
+    db.add(job)
+    db.flush()  # assigns job.id
+    return job
 
 
 def notify_new_record(db: Session, record: ClientRecord) -> WebhookDelivery | None:
