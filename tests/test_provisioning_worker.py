@@ -7,6 +7,8 @@ webhook queue."""
 
 from __future__ import annotations
 
+import time
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -77,3 +79,105 @@ def test_deliver_provisioning_attempt_records_a_connection_failure(db: Session, 
     assert attempt.status_code is None
     assert attempt.error is not None
     assert remote_id is None
+
+
+def test_process_due_provisioning_jobs_marks_a_job_dead_after_max_attempts(db: Session, monkeypatch):
+    import tidybridge.provisioning as provisioning_module
+    from tidybridge.webhook_worker import process_due_provisioning_jobs
+
+    monkeypatch.setattr(provisioning_module.settings, "provisioning_url", "http://127.0.0.1:1/Users")
+    monkeypatch.setattr(provisioning_module.settings, "webhook_max_attempts", 2)
+    monkeypatch.setattr(provisioning_module.settings, "webhook_retry_backoff_seconds", 0.01)
+
+    record = ClientRecord(source_file="test.csv", full_name="Ada Lovelace", email="ada@example.com")
+    db.add(record)
+    db.flush()
+    job = enqueue_provisioning(db, record)
+    db.commit()
+    job_id = job.id
+
+    process_due_provisioning_jobs(db)  # attempt 1 fails -> scheduled for attempt 2
+    time.sleep(0.05)
+    process_due_provisioning_jobs(db)  # attempt 2 fails -> max_attempts reached -> dead
+
+    refreshed = db.get(ProvisioningJob, job_id)
+    assert refreshed.status == "dead"
+    assert refreshed.attempt_number == 2
+
+
+def test_process_due_provisioning_jobs_treats_a_409_as_skipped_exists(db: Session, monkeypatch):
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    import tidybridge.provisioning as provisioning_module
+    from tidybridge.webhook_worker import process_due_provisioning_jobs
+
+    class _ConflictHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length", 0))
+            self.rfile.read(length)
+            self.send_response(409)
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), _ConflictHandler)
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    monkeypatch.setattr(provisioning_module.settings, "provisioning_url", f"http://127.0.0.1:{port}/Users")
+    record = ClientRecord(source_file="test.csv", full_name="Ada Lovelace", email="ada@example.com")
+    db.add(record)
+    db.flush()
+    job = enqueue_provisioning(db, record)
+    db.commit()
+    job_id = job.id
+
+    process_due_provisioning_jobs(db)
+    server.shutdown()
+
+    refreshed = db.get(ProvisioningJob, job_id)
+    assert refreshed.status == "skipped_exists"  # terminal, not retried
+    assert refreshed.attempt_number == 1
+
+
+def test_process_due_provisioning_jobs_succeeds_and_captures_remote_id(db: Session, monkeypatch):
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    import tidybridge.provisioning as provisioning_module
+    from tidybridge.webhook_worker import process_due_provisioning_jobs
+
+    class _CreatedHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length", 0))
+            self.rfile.read(length)
+            self.send_response(201)
+            self.send_header("Content-Type", "application/json")
+            body = b'{"id": "usr_8f3a"}'
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), _CreatedHandler)
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    monkeypatch.setattr(provisioning_module.settings, "provisioning_url", f"http://127.0.0.1:{port}/Users")
+    record = ClientRecord(source_file="test.csv", full_name="Ada Lovelace", email="ada@example.com")
+    db.add(record)
+    db.flush()
+    job = enqueue_provisioning(db, record)
+    db.commit()
+    job_id = job.id
+
+    process_due_provisioning_jobs(db)
+    server.shutdown()
+
+    refreshed = db.get(ProvisioningJob, job_id)
+    assert refreshed.status == "done"
+    assert refreshed.remote_id == "usr_8f3a"

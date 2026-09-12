@@ -24,7 +24,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tidybridge.config import settings
-from tidybridge.models import ClientRecord, WebhookJob
+from tidybridge.models import ClientRecord, ProvisioningJob, WebhookJob
+from tidybridge.provisioning import deliver_provisioning_attempt
 from tidybridge.webhooks import _backoff_seconds, deliver_attempt
 
 
@@ -56,6 +57,48 @@ def process_due_jobs(db: Session, limit: int = 20) -> int:
         delivery = deliver_attempt(db, record, job.attempt_number, job.idempotency_key)
         if delivery.success:
             job.status = "done"
+        elif job.attempt_number >= settings.webhook_max_attempts:
+            job.status = "dead"
+        else:
+            delay = _backoff_seconds(job.attempt_number)
+            job.attempt_number += 1
+            job.available_at = datetime.now(UTC) + timedelta(seconds=delay)
+        db.commit()
+        processed += 1
+    return processed
+
+
+def process_due_provisioning_jobs(db: Session, limit: int = 20) -> int:
+    """Same claim pattern as process_due_jobs() above, for the
+    provisioning_jobs queue (provisioning.py's enqueue_provisioning()
+    writes to it) - see that function's docstring for why one job at a
+    time. One difference from webhook delivery: a 409 (the user already
+    exists on the target system) is terminal success-equivalent
+    ("skipped_exists"), not a failure to retry - see the spec."""
+    processed = 0
+    for _ in range(limit):
+        job = db.execute(
+            select(ProvisioningJob)
+            .where(
+                ProvisioningJob.status == "pending",
+                ProvisioningJob.available_at <= datetime.now(UTC),
+            )
+            .order_by(ProvisioningJob.available_at)
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        ).scalar_one_or_none()
+        if job is None:
+            break
+
+        record = db.get(ClientRecord, job.record_id)
+        attempt, remote_id = deliver_provisioning_attempt(
+            db, record, job.attempt_number, job.idempotency_key
+        )
+        if attempt.status_code == 409:
+            job.status = "skipped_exists"
+        elif attempt.success:
+            job.status = "done"
+            job.remote_id = remote_id
         elif job.attempt_number >= settings.webhook_max_attempts:
             job.status = "dead"
         else:
