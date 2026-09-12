@@ -88,6 +88,29 @@ export interface WebhookJobStatus {
   available_at: string | null;
 }
 
+export interface ProvisioningAttempt {
+  id: number;
+  record_id: string;
+  url: string;
+  status_code: number | null;
+  success: boolean;
+  error: string | null;
+  attempt_number: number;
+  attempted_at: string;
+}
+
+// The provisioning pipeline's current state for one record - same
+// shape/purpose as WebhookJobStatus above, plus remote_id once the
+// target system has actually created the user. Doesn't reflect a
+// replay's own outcome synchronously - see the backend's
+// replay_provisioning docstring.
+export interface ProvisioningJobStatus {
+  status: "pending" | "done" | "skipped_exists" | "dead" | "not_configured";
+  attempt_number: number | null;
+  available_at: string | null;
+  remote_id: string | null;
+}
+
 export interface CurrentUser {
   id: string;
   email: string;

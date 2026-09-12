@@ -2,7 +2,13 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import * as api from "../api/client";
 import { ApiError } from "../api/client";
-import type { ClientRecord, WebhookDelivery, WebhookJobStatus } from "../api/types";
+import type {
+  ClientRecord,
+  ProvisioningAttempt,
+  ProvisioningJobStatus,
+  WebhookDelivery,
+  WebhookJobStatus,
+} from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { CopyButton } from "../components/CopyButton";
 import { Spinner } from "../components/Spinner";
@@ -13,21 +19,33 @@ export function RecordDetailPage() {
   const [record, setRecord] = useState<ClientRecord | null>(null);
   const [webhooks, setWebhooks] = useState<WebhookDelivery[]>([]);
   const [webhookStatus, setWebhookStatus] = useState<WebhookJobStatus | null>(null);
+  const [provisioning, setProvisioning] = useState<ProvisioningAttempt[]>([]);
+  const [provisioningStatus, setProvisioningStatus] = useState<ProvisioningJobStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [replaying, setReplaying] = useState(false);
   const [replayError, setReplayError] = useState<string | null>(null);
+  const [replayingProvisioning, setReplayingProvisioning] = useState(false);
+  const [provisioningReplayError, setProvisioningReplayError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
     setError(null);
-    Promise.all([api.getRecord(id), api.getRecordWebhooks(id), api.getRecordWebhookStatus(id)])
-      .then(([recordResult, webhooksResult, statusResult]) => {
+    Promise.all([
+      api.getRecord(id),
+      api.getRecordWebhooks(id),
+      api.getRecordWebhookStatus(id),
+      api.getRecordProvisioning(id),
+      api.getRecordProvisioningStatus(id),
+    ])
+      .then(([recordResult, webhooksResult, statusResult, provisioningResult, provisioningStatusResult]) => {
         setRecord(recordResult);
         setWebhooks(webhooksResult);
         setWebhookStatus(statusResult);
+        setProvisioning(provisioningResult);
+        setProvisioningStatus(provisioningStatusResult);
       })
       .catch((err) => {
         setError(
@@ -61,6 +79,22 @@ export function RecordDetailPage() {
       setReplayError(err instanceof ApiError ? err.message : "Couldn't resend the webhook.");
     } finally {
       setReplaying(false);
+    }
+  }
+
+  async function handleReplayProvisioning() {
+    if (!id) return;
+    setReplayingProvisioning(true);
+    setProvisioningReplayError(null);
+    try {
+      const status = await api.replayProvisioning(id);
+      setProvisioningStatus(status); // freshly-reset job state - the worker hasn't run yet
+    } catch (err) {
+      setProvisioningReplayError(
+        err instanceof ApiError ? err.message : "Couldn't retry provisioning.",
+      );
+    } finally {
+      setReplayingProvisioning(false);
     }
   }
 
@@ -180,6 +214,72 @@ export function RecordDetailPage() {
         )}
       </div>
 
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold">Provisioning</h2>
+            <ProvisioningStatusBadge status={provisioningStatus} />
+          </div>
+          <button
+            type="button"
+            onClick={handleReplayProvisioning}
+            disabled={replayingProvisioning}
+            className="rounded-md border border-border px-3 py-1 text-xs hover:bg-secondary transition disabled:opacity-50"
+          >
+            {replayingProvisioning ? "Retrying…" : "Retry provisioning"}
+          </button>
+        </div>
+        {provisioningReplayError && (
+          <p className="mb-2 text-sm text-red-600">{provisioningReplayError}</p>
+        )}
+        {provisioningStatus?.remote_id && (
+          <p className="mb-2 text-sm text-muted-foreground">
+            Provisioned as <code className="text-foreground">{provisioningStatus.remote_id}</code> on
+            the target system.
+          </p>
+        )}
+        {provisioning.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            No provisioning target was configured, or none has been attempted for this record.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-md border border-border">
+            <table className="w-full text-sm">
+              <thead className="bg-secondary text-left text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2 font-medium">Attempt</th>
+                  <th className="px-4 py-2 font-medium">Attempted</th>
+                  <th className="px-4 py-2 font-medium">Status</th>
+                  <th className="px-4 py-2 font-medium">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {provisioning.map((p) => (
+                  <tr key={p.id} className="border-t border-border">
+                    <td className="px-4 py-2 text-muted-foreground">#{p.attempt_number}</td>
+                    <td className="px-4 py-2 text-muted-foreground">
+                      {new Date(p.attempted_at).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-2">{p.status_code ?? "—"}</td>
+                    <td className="px-4 py-2">
+                      {p.success ? (
+                        <span className="text-primary">
+                          {p.status_code === 409 ? "Already existed" : "Provisioned"}
+                        </span>
+                      ) : (
+                        <span className="text-red-600" title={p.error ?? undefined}>
+                          Failed
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       <ConfirmDialog
         open={confirmingDelete}
         title="Delete this record?"
@@ -227,6 +327,36 @@ function WebhookStatusBadge({ status }: { status: WebhookJobStatus | null }) {
       {status.attempt_number && status.attempt_number > 1
         ? `Retrying (attempt ${status.attempt_number})`
         : "Delivery pending"}
+    </span>
+  );
+}
+
+// Same shape as WebhookStatusBadge, plus "skipped_exists" - a 409 (the
+// user already exists on the target system) is terminal
+// success-equivalent, not a failure (see the backend spec).
+function ProvisioningStatusBadge({ status }: { status: ProvisioningJobStatus | null }) {
+  if (!status || status.status === "not_configured") return null;
+
+  if (status.status === "dead") {
+    return (
+      <span className="rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400 px-2 py-0.5 text-xs">
+        Provisioning failed permanently
+      </span>
+    );
+  }
+  if (status.status === "done" || status.status === "skipped_exists") {
+    return (
+      <span className="rounded-full bg-accent text-accent-foreground px-2 py-0.5 text-xs">
+        {status.status === "done" ? "Provisioned" : "Already existed"}
+      </span>
+    );
+  }
+  // "pending"
+  return (
+    <span className="rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400 px-2 py-0.5 text-xs">
+      {status.attempt_number && status.attempt_number > 1
+        ? `Retrying (attempt ${status.attempt_number})`
+        : "Provisioning pending"}
     </span>
   );
 }
