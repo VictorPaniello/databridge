@@ -38,12 +38,22 @@ from tidybridge.auth_models import User
 from tidybridge.config import settings
 from tidybridge.db import get_db
 from tidybridge.ingest import ingest_file, load_schema
-from tidybridge.models import ClientRecord, IngestionRun, WebhookDelivery, WebhookJob
+from tidybridge.models import (
+    ClientRecord,
+    IngestionRun,
+    ProvisioningAttempt,
+    ProvisioningJob,
+    WebhookDelivery,
+    WebhookJob,
+)
+from tidybridge.provisioning import replay_provisioning
 from tidybridge.schemas import (
     ClientRecordOut,
     IngestionRunOut,
     IngestionRunsPage,
     IngestResult,
+    ProvisioningAttemptOut,
+    ProvisioningJobStatusOut,
     RecordsPage,
     WebhookDeliveryOut,
     WebhookJobStatusOut,
@@ -543,6 +553,67 @@ def replay_webhook(
     if delivery is None:
         raise HTTPException(status_code=400, detail="No webhook URL is configured")
     return delivery
+
+
+@app.get("/records/{record_id}/provisioning-status", response_model=ProvisioningJobStatusOut)
+def get_record_provisioning_status(
+    record_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_active_user),
+) -> ProvisioningJobStatusOut:
+    """The automatic post-ingest provisioning pipeline's current state
+    for one record - same shape/purpose as get_record_webhook_status
+    above."""
+    _get_owned_record(db, record_id, user)
+    job = db.execute(
+        select(ProvisioningJob).where(ProvisioningJob.record_id == record_id)
+    ).scalar_one_or_none()
+    if job is None:
+        return ProvisioningJobStatusOut(
+            status="not_configured", attempt_number=None, available_at=None, remote_id=None
+        )
+    return ProvisioningJobStatusOut(
+        status=job.status,
+        attempt_number=job.attempt_number,
+        available_at=job.available_at,
+        remote_id=job.remote_id,
+    )
+
+
+@app.get("/records/{record_id}/provisioning", response_model=list[ProvisioningAttemptOut])
+def get_record_provisioning(
+    record_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_active_user),
+) -> list:
+    _get_owned_record(db, record_id, user)
+    query = (
+        select(ProvisioningAttempt)
+        .where(ProvisioningAttempt.record_id == record_id)
+        .order_by(ProvisioningAttempt.attempted_at, ProvisioningAttempt.id)
+    )
+    return db.execute(query).scalars().all()
+
+
+@app.post("/records/{record_id}/provisioning/replay", response_model=ProvisioningJobStatusOut)
+def replay_provisioning_endpoint(
+    record_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_active_user),
+) -> ProvisioningJobStatusOut:
+    """Manually re-enqueues provisioning for one record, on demand - see
+    replay_provisioning()'s docstring in provisioning.py for how this
+    differs from replay_webhook above."""
+    record = _get_owned_record(db, record_id, user)
+    if not settings.provisioning_url:
+        raise HTTPException(status_code=400, detail="No provisioning URL is configured")
+    job = replay_provisioning(db, record)
+    return ProvisioningJobStatusOut(
+        status=job.status,
+        attempt_number=job.attempt_number,
+        available_at=job.available_at,
+        remote_id=job.remote_id,
+    )
 
 
 @app.delete("/records/{record_id}", status_code=204)

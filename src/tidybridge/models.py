@@ -186,3 +186,67 @@ class WebhookJob(Base):
     """When this job next becomes eligible to be claimed - now at enqueue
     time, now + backoff after each failed attempt."""
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ProvisioningAttempt(Base):
+    """Audit log: every HTTP attempt to provision a record on the
+    configured downstream system, whether it succeeded, hit a 409
+    (already exists), or failed. Mirrors WebhookDelivery's shape
+    exactly - see the plan's Global Constraints for why this includes
+    `url`/`idempotency_key` despite the spec's own table listing
+    omitting them."""
+
+    __tablename__ = "provisioning_attempts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    record_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("client_records.id", ondelete="CASCADE"), nullable=False
+    )
+    url: Mapped[str] = mapped_column(String, nullable=False)
+    status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    """True for both 2xx and 409 - "success" here means "resolved, no
+    more attempts needed", matching ProvisioningJob.status's done/
+    skipped_exists both being terminal (see process_due_provisioning_jobs
+    in webhook_worker.py)."""
+    error: Mapped[str | None] = mapped_column(String, nullable=True)
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    idempotency_key: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, default=uuid.uuid4
+    )
+    attempted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ProvisioningJob(Base):
+    """The queue enqueue_provisioning() (provisioning.py) writes to and
+    webhook_worker.py's process_due_provisioning_jobs() claims from -
+    one row per record needing automatic (post-ingest) provisioning.
+    Same scheduling-only shape as WebhookJob, plus remote_id: the user
+    id the target system hands back on success, needed for any future
+    update/dedup, which is exactly why this doesn't fit
+    ProvisioningAttempt's per-attempt audit shape."""
+
+    __tablename__ = "provisioning_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    idempotency_key: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, default=uuid.uuid4
+    )
+    record_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("client_records.id", ondelete="cascade"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    """"pending" | "done" | "skipped_exists" (a 409 - the user already
+    exists on the target system, treated as resolved, not a failure) |
+    "dead" (every attempt up to settings.webhook_max_attempts failed)."""
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    remote_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

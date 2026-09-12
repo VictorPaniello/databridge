@@ -57,6 +57,23 @@ class Settings(BaseSettings):
     latency to that one upload response instead of failing silently;
     an explicit, documented tradeoff, not an oversight."""
 
+    provisioning_url: str | None = None
+    """Where to POST a SCIM-shaped user-creation request when a new
+    record is ingested. If unset, provisioning is skipped entirely -
+    same disable convention as webhook_url. A separate mechanism from
+    the webhook (see the provisioning connector spec): the webhook
+    notifies that a record arrived, this one actually creates the
+    corresponding user on a configured downstream system."""
+    provisioning_api_key: str | None = None
+    """Sent as `Authorization: Bearer <key>` on every provisioning
+    request (see provisioning.py) - a static bearer token, the realistic
+    default for most SCIM implementations. None sends no Authorization
+    header at all, the same convention webhook_secret uses."""
+    provisioning_mapping_path: str = "examples/provisioning_mapping.yaml"
+    """Path to the field-mapping YAML (see provisioning.py's
+    build_scim_payload), resolved relative to the process's working
+    directory - same convention and same reason as schema_path below."""
+
     schema_path: str = "examples/schema.yaml"
     """Path to the tidycsv schema, resolved relative to the process's
     working directory at startup - NOT relative to this source file. A

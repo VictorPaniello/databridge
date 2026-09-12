@@ -4,6 +4,8 @@ import type {
   IngestionRun,
   IngestionRunsPage,
   IngestResult,
+  ProvisioningAttempt,
+  ProvisioningJobStatus,
   RecordsPage,
   WebhookDelivery,
   WebhookJobStatus,
@@ -343,6 +345,22 @@ export async function getRecordWebhookStatus(id: string): Promise<WebhookJobStat
 // WEBHOOK_URL is configured server-side - there's nothing to replay to.
 export async function replayWebhook(id: string): Promise<WebhookDelivery> {
   return request<WebhookDelivery>(`/records/${id}/webhooks/replay`, { method: "POST" });
+}
+
+export async function getRecordProvisioning(id: string): Promise<ProvisioningAttempt[]> {
+  return request<ProvisioningAttempt[]>(`/records/${id}/provisioning`);
+}
+
+export async function getRecordProvisioningStatus(id: string): Promise<ProvisioningJobStatus> {
+  return request<ProvisioningJobStatus>(`/records/${id}/provisioning-status`);
+}
+
+// Unlike replayWebhook, this doesn't resolve with a delivery result -
+// the backend only resets the job for its worker to pick up later (see
+// replay_provisioning's docstring). Callers refetch status/history
+// after a short delay the same way handleReplayProvisioning does.
+export async function replayProvisioning(id: string): Promise<ProvisioningJobStatus> {
+  return request<ProvisioningJobStatus>(`/records/${id}/provisioning/replay`, { method: "POST" });
 }
 
 export async function deleteRecord(id: string): Promise<void> {

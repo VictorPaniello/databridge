@@ -15,7 +15,7 @@ import sys
 import time
 
 from tidybridge.db import SessionLocal
-from tidybridge.webhook_worker import process_due_jobs
+from tidybridge.webhook_worker import process_due_jobs, process_due_provisioning_jobs
 
 POLL_INTERVAL_SECONDS = 2.0
 
@@ -36,9 +36,9 @@ def main() -> None:
     while True:
         db = SessionLocal()
         try:
-            processed = process_due_jobs(db)
+            processed = process_due_jobs(db) + process_due_provisioning_jobs(db)
             if processed:
-                print(f"processed {processed} webhook job(s)")
+                print(f"processed {processed} job(s)")
         finally:
             db.close()
         time.sleep(POLL_INTERVAL_SECONDS)

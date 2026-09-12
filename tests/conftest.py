@@ -13,6 +13,7 @@ os.environ.setdefault(
     "DATABASE_URL", "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/tidybridge_test"
 )
 os.environ.setdefault("WEBHOOK_URL", "")  # no webhook during tests - keep them hermetic
+os.environ.setdefault("PROVISIONING_URL", "")  # same - no provisioning target during tests
 
 from alembic import command
 from alembic.config import Config
@@ -66,8 +67,8 @@ def _clean_tables():
         # without adding it here breaks every test that touches the DB,
         # not just ones that use it directly.
         conn.exec_driver_sql(
-            "TRUNCATE webhook_jobs, webhook_deliveries, client_records, ingestion_runs, "
-            "oauth_account, users"
+            "TRUNCATE webhook_jobs, webhook_deliveries, provisioning_jobs, "
+            "provisioning_attempts, client_records, ingestion_runs, oauth_account, users"
         )
 
 
