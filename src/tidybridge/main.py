@@ -402,12 +402,36 @@ def export_records(
         base_query = base_query.where(ClientRecord.ingestion_run_id == ingestion_run_id)
     records = db.execute(base_query.order_by(ClientRecord.created_at.desc())).scalars().all()
 
+    # Webhook status lives on WebhookJob (one row per record needing a
+    # notification), not on ClientRecord itself - see get_record_webhook_status
+    # above for the same not_configured/status/attempt_number/available_at
+    # shape, one record at a time. Fetched here as a single bulk query keyed
+    # by record_id rather than one query per record in the loop below.
+    jobs_by_record_id = {
+        job.record_id: job
+        for job in db.execute(
+            select(WebhookJob).where(WebhookJob.record_id.in_([r.id for r in records]))
+        ).scalars()
+    }
+
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(
-        ["full_name", "email", "signup_date", "amount", "phone", "has_issues", "issues"]
+        [
+            "full_name",
+            "email",
+            "signup_date",
+            "amount",
+            "phone",
+            "has_issues",
+            "issues",
+            "webhook_status",
+            "webhook_attempt_number",
+            "webhook_available_at",
+        ]
     )
     for record in records:
+        job = jobs_by_record_id.get(record.id)
         writer.writerow(
             [
                 record.full_name,
@@ -417,6 +441,9 @@ def export_records(
                 record.phone,
                 record.has_issues,
                 _format_issues(record.issues),
+                job.status if job else "not_configured",
+                job.attempt_number if job else None,
+                job.available_at if job else None,
             ]
         )
 
