@@ -1,0 +1,12 @@
+# Maps ClientRecord fields onto a SCIM core-User POST /Users body. Each
+# value is a ClientRecord attribute name, looked up via getattr - except
+# the literal strings "true"/"false" (quoted so PyYAML doesn't coerce
+# them to a real bool, which would make them indistinguishable from a
+# field name), used as literal values instead. See build_scim_payload()
+# in provisioning.py.
+mapping:
+  userName: email
+  name.givenName: full_name  # split on first space - documented limitation
+  name.familyName: full_name
+  emails[0].value: email
+  active: "true"
