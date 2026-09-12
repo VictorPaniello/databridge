@@ -167,3 +167,30 @@ def deliver_provisioning_attempt(
     db.add(attempt)
     db.commit()
     return attempt, remote_id
+
+
+def replay_provisioning(db: Session, record: ClientRecord) -> ProvisioningJob:
+    """Manually enqueues a fresh provisioning attempt for one record -
+    real, separate action from the automatic queue, for the same reason
+    replay_webhook exists (main.py). Unlike replay_webhook (which runs
+    its own retry loop synchronously and returns the resulting
+    delivery), this just resets/creates the ProvisioningJob row and lets
+    the worker pick it up, per the spec's "manually enqueue a fresh
+    attempt" - nothing has actually run yet by the time this returns.
+    Generates a fresh idempotency_key, same reasoning as
+    notify_new_record()'s own replay key."""
+    job = db.execute(
+        select(ProvisioningJob).where(ProvisioningJob.record_id == record.id)
+    ).scalar_one_or_none()
+    if job is None:
+        job = ProvisioningJob(record_id=record.id)
+        db.add(job)
+    else:
+        job.status = "pending"
+        job.attempt_number = 1
+        job.available_at = datetime.now(UTC)
+        job.idempotency_key = uuid.uuid4()
+        job.remote_id = None
+    db.commit()
+    db.refresh(job)
+    return job

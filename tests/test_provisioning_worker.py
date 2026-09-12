@@ -81,7 +81,9 @@ def test_deliver_provisioning_attempt_records_a_connection_failure(db: Session, 
     assert remote_id is None
 
 
-def test_process_due_provisioning_jobs_marks_a_job_dead_after_max_attempts(db: Session, monkeypatch):
+def test_process_due_provisioning_jobs_marks_a_job_dead_after_max_attempts(
+    db: Session, monkeypatch
+):
     import tidybridge.provisioning as provisioning_module
     from tidybridge.webhook_worker import process_due_provisioning_jobs
 

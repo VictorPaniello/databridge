@@ -54,6 +54,34 @@ class WebhookJobStatusOut(BaseModel):
     available_at: datetime | None
 
 
+class ProvisioningAttemptOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    record_id: uuid.UUID
+    url: str
+    status_code: int | None
+    success: bool
+    error: str | None
+    attempt_number: int
+    idempotency_key: uuid.UUID
+    attempted_at: datetime
+
+
+class ProvisioningJobStatusOut(BaseModel):
+    """The provisioning pipeline's current state for one record - same
+    shape/purpose as WebhookJobStatusOut, plus remote_id once the target
+    system has actually created the user. "not_configured" when no
+    PROVISIONING_URL is set at all. Doesn't reflect a replay's own
+    outcome synchronously - replay_provisioning only resets the job for
+    the worker to pick up (see the plan's clarification #4)."""
+
+    status: str  # "pending" | "done" | "skipped_exists" | "dead" | "not_configured"
+    attempt_number: int | None
+    available_at: datetime | None
+    remote_id: str | None
+
+
 class IngestResult(BaseModel):
     ingestion_run_id: uuid.UUID
     rows_total: int

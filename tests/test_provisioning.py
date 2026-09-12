@@ -58,7 +58,9 @@ def test_build_scim_payload_maps_fields_into_the_documented_shape():
 def test_build_scim_payload_splits_a_single_word_name_on_both_parts():
     # "documented limitation" (spec) - a name with no space has nothing
     # to put in familyName, so it repeats into both.
-    record = ClientRecord(id=uuid.uuid4(), source_file="test.csv", full_name="Cher", email="c@e.com")
+    record = ClientRecord(
+        id=uuid.uuid4(), source_file="test.csv", full_name="Cher", email="c@e.com"
+    )
     mapping = _load_mapping()
 
     payload = build_scim_payload(record, mapping)
@@ -90,3 +92,87 @@ def test_upload_does_not_enqueue_provisioning_without_a_configured_url(
         select(ProvisioningJob).where(ProvisioningJob.record_id == record_id)
     ).scalar_one_or_none()
     assert job is None
+
+
+def test_provisioning_status_is_not_configured_without_a_url(client: TestClient):
+    record_id = _upload_single_row(client).json()["records"][0]["id"]
+    response = client.get(f"/records/{record_id}/provisioning-status")
+    assert response.status_code == 200
+    assert response.json()["status"] == "not_configured"
+
+
+def test_provisioning_status_is_pending_before_the_worker_runs(client: TestClient, monkeypatch):
+    import tidybridge.provisioning as provisioning_module
+
+    monkeypatch.setattr(provisioning_module.settings, "provisioning_url", "http://127.0.0.1:1/Users")
+    record_id = _upload_single_row(client).json()["records"][0]["id"]
+
+    response = client.get(f"/records/{record_id}/provisioning-status")
+    assert response.json()["status"] == "pending"
+    assert response.json()["attempt_number"] == 1
+    assert response.json()["remote_id"] is None
+
+
+def test_provisioning_status_respects_ownership(client: TestClient, other_client: TestClient):
+    record_id = _upload_single_row(client).json()["records"][0]["id"]
+    response = other_client.get(f"/records/{record_id}/provisioning-status")
+    assert response.status_code == 404
+
+
+def test_get_provisioning_returns_the_attempt_history(client: TestClient, db: Session, monkeypatch):
+    import tidybridge.provisioning as provisioning_module
+    from tidybridge.webhook_worker import process_due_provisioning_jobs
+
+    monkeypatch.setattr(provisioning_module.settings, "provisioning_url", "http://127.0.0.1:1/Users")
+    record_id = _upload_single_row(client).json()["records"][0]["id"]
+    process_due_provisioning_jobs(db)
+
+    attempts = client.get(f"/records/{record_id}/provisioning").json()
+    assert len(attempts) == 1
+    assert attempts[0]["success"] is False
+    assert attempts[0]["record_id"] == record_id
+
+
+def test_replay_provisioning_resets_the_job_and_requires_a_configured_url(
+    client: TestClient, monkeypatch
+):
+    record_id = _upload_single_row(client).json()["records"][0]["id"]
+
+    no_url_response = client.post(f"/records/{record_id}/provisioning/replay")
+    assert no_url_response.status_code == 400
+
+    import tidybridge.provisioning as provisioning_module
+
+    monkeypatch.setattr(provisioning_module.settings, "provisioning_url", "http://127.0.0.1:1/Users")
+    response = client.post(f"/records/{record_id}/provisioning/replay")
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending"
+    assert response.json()["attempt_number"] == 1
+
+
+def test_replay_provisioning_respects_ownership(client: TestClient, other_client: TestClient):
+    record_id = _upload_single_row(client).json()["records"][0]["id"]
+    response = other_client.post(f"/records/{record_id}/provisioning/replay")
+    assert response.status_code == 404
+
+
+def test_provisioning_endpoints_require_auth():
+    from tidybridge.main import app
+
+    unauthenticated = TestClient(app)
+    assert (
+        unauthenticated.get(
+            "/records/00000000-0000-0000-0000-000000000000/provisioning-status"
+        ).status_code
+        == 401
+    )
+    assert (
+        unauthenticated.get("/records/00000000-0000-0000-0000-000000000000/provisioning").status_code
+        == 401
+    )
+    assert (
+        unauthenticated.post(
+            "/records/00000000-0000-0000-0000-000000000000/provisioning/replay"
+        ).status_code
+        == 401
+    )
