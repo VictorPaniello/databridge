@@ -26,6 +26,7 @@ from tidycsv.schema import Schema
 
 from tidybridge.config import settings
 from tidybridge.models import ClientRecord, IngestionRun
+from tidybridge.provisioning import enqueue_provisioning
 from tidybridge.webhooks import enqueue_delivery
 
 
@@ -125,6 +126,7 @@ def ingest_file(
     # ingest.
     for record in inserted:
         enqueue_delivery(db, record)
+        enqueue_provisioning(db, record)
 
     db.commit()
 
